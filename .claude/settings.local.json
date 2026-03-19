@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.gsa.gov)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(ssh -T git@github.com)",
+      "Read(//Users/vedparikh/.ssh/**)",
+      "Bash(ssh-keygen -lf ~/.ssh/id_ed25519.pub)"
+    ]
+  }
+}

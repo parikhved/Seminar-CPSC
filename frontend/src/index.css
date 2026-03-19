@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* ── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
+
+/* ── USWDS-aligned color tokens ──────────────────────────── */
+:root {
+  --gov-blue:        #0071BC;
+  --gov-blue-dark:   #162e51;
+  --gov-blue-mid:    #1a4480;
+  --gov-base:        #1b1b1b;
+  --gov-base-light:  #f0f0f0;
+  --gov-white:       #ffffff;
+  --gov-border:      #dfe1e2;
+  --gov-gray-cool:   #71767a;
+  --gov-gray-mid:    #a9aeb1;
+  --gov-gray-light:  #f8f8f8;
+  --gov-red:         #d54309;
+  --gov-green:       #00a91c;
+  --gov-yellow:      #ffbe2e;
+  --gov-info:        #00bde3;
+}
+
+/* ── Global Reset ────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Source Sans 3', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  color: var(--gov-base);
+  background-color: var(--gov-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--gov-base-light); }
+::-webkit-scrollbar-thumb { background: var(--gov-gray-mid); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gov-gray-cool); }
+
+/* ── Toast slide-in ──────────────────────────────────────── */
+@keyframes slideInRight {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.toast-enter { animation: slideInRight 0.3s ease-out forwards; }
