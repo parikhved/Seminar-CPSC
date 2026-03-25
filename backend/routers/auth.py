@@ -20,8 +20,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     if not any_user_exists:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials.",
         )
 
     if user:
