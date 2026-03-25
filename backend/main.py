@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,15 +11,21 @@ app = FastAPI(
     version="1.0.0",
 )
 
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+
+allow_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://cpsc-compliance.vercel.app",
+]
+
+if frontend_url and frontend_url not in allow_origins:
+    allow_origins.append(frontend_url)
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        # Vercel preview and production domains
-        "https://*.vercel.app",
-    ],
+    allow_origins=allow_origins,
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
