@@ -12,22 +12,44 @@ DEMO_PASSWORD = "demo123"
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
+    normalized_email = payload.email.strip().lower()
+    normalized_password = payload.password.strip()
 
-    if not user:
+    user = db.query(User).filter(User.email == normalized_email).first()
+    any_user_exists = db.query(User.userID).first() is not None
+
+    if not any_user_exists:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email or password is incorrect. Please try again.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
         )
 
-    # Accept the demo password OR the stored password value for Sprint 1
-    password_valid = (
-        payload.password == DEMO_PASSWORD or payload.password == user.password
-    )
-    if not password_valid:
+    if user:
+        password_valid = (
+            normalized_password == DEMO_PASSWORD
+            or normalized_password == user.password
+        )
+        if not password_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Password is incorrect.",
+            )
+
+    else:
+        password_matches_any_user = normalized_password == DEMO_PASSWORD or (
+            db.query(User.userID).filter(User.password == normalized_password).first()
+            is not None
+        )
+
+        if password_matches_any_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Username is incorrect.",
+            )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email or password is incorrect. Please try again.",
+            detail="Invalid credentials.",
         )
 
     if user.role != "Manager":
