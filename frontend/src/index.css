@@ -1,7 +1,5 @@
-@import "tailwindcss";
-
-/* ── Google Fonts ─────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
+@import "tailwindcss";
 
 /* ── USWDS-aligned color tokens ──────────────────────────── */
 :root {
@@ -19,6 +17,8 @@
   --gov-green:       #00a91c;
   --gov-yellow:      #ffbe2e;
   --gov-info:        #00bde3;
+  --app-bg:          #f8fafc;
+  --app-text:        #0f172a;
 }
 
 /* ── Global Reset ────────────────────────────────────────── */
@@ -35,9 +35,23 @@ html, body, #root {
 body {
   font-family: 'Source Sans 3', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 16px;
-  color: var(--gov-base);
-  background-color: var(--gov-white);
+  color: var(--app-text);
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08) 0%, transparent 28%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.1) 0%, transparent 32%),
+    var(--app-bg);
   -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────── */

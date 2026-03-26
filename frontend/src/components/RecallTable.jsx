@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus } from 'lucide-react'
+import { ArrowRight, Eye } from 'lucide-react'
 
 function truncate(str, maxLen = 80) {
   if (!str) return '—'
@@ -11,7 +11,12 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function RecallTable({ recalls, onAddToShortList, shortlistedIds = new Set() }) {
+export default function RecallTable({
+  recalls,
+  onViewRecall,
+  onPrioritizeRecall,
+  shortlistedIds = new Set(),
+}) {
   const TH = ({ children, align = 'left' }) => (
     <th
       style={{
@@ -39,15 +44,16 @@ export default function RecallTable({ recalls, onAddToShortList, shortlistedIds 
             <TH>Product Name</TH>
             <TH>Manufacturer</TH>
             <TH>Hazard</TH>
+            <TH>Status</TH>
             <TH>Recall Date</TH>
-            <TH>Remedy</TH>
+            <TH>Severity</TH>
             <TH align="center">Action</TH>
           </tr>
         </thead>
         <tbody>
           {recalls.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14, backgroundColor: '#FFFFFF' }}>
+              <td colSpan={8} style={{ padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14, backgroundColor: '#FFFFFF' }}>
                 No recalls found.
               </td>
             </tr>
@@ -73,47 +79,27 @@ export default function RecallTable({ recalls, onAddToShortList, shortlistedIds 
                   <td style={{ ...td, maxWidth: 240 }}>
                     <span title={r.hazard} style={{ color: '#475569' }}>{truncate(r.hazard, 70)}</span>
                   </td>
+                  <td style={td}>
+                    <span style={statusPill(r.status)}>{r.status ?? 'Pending'}</span>
+                  </td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>{formatDate(r.recallDate)}</td>
                   <td style={td}>
-                    {r.remedy ? (
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        fontSize: 12,
-                        fontWeight: 500,
-                        backgroundColor: '#E1F3F8',
-                        color: '#0071BC',
-                      }}>
-                        {r.remedy}
-                      </span>
-                    ) : '—'}
+                    {r.severity ? <span style={severityPill(r.severity)}>{r.severity}</span> : '—'}
                   </td>
                   <td style={{ ...td, textAlign: 'center' }}>
-                    {listed ? (
-                      <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500 }}>Already Listed</span>
-                    ) : (
-                      <button
-                        onClick={() => onAddToShortList(r)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          padding: '6px 12px',
-                          borderRadius: 5,
-                          border: 'none',
-                          backgroundColor: '#0071BC',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        <Plus size={13} />
-                        Add to List
+                    <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button onClick={() => onViewRecall(r)} style={secondaryActionBtn}>
+                        <Eye size={13} />
+                        View
                       </button>
-                    )}
+                      <button
+                        onClick={() => onPrioritizeRecall(r)}
+                        style={listed ? listedActionBtn : primaryActionBtn}
+                      >
+                        <ArrowRight size={13} />
+                        {listed ? 'Update' : 'Prioritize'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -130,4 +116,75 @@ const td = {
   fontSize: 13,
   color: '#475569',
   verticalAlign: 'middle',
+}
+
+const primaryActionBtn = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '6px 12px',
+  borderRadius: 999,
+  border: 'none',
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
+const listedActionBtn = {
+  ...primaryActionBtn,
+  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+}
+
+const secondaryActionBtn = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '6px 12px',
+  borderRadius: 999,
+  border: '1px solid #cbd5e1',
+  backgroundColor: '#ffffff',
+  color: '#0f172a',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
+function statusPill(status) {
+  const map = {
+    Pending: { backgroundColor: '#dbeafe', color: '#1d4ed8' },
+    'Under Review': { backgroundColor: '#fef3c7', color: '#b45309' },
+    Resolved: { backgroundColor: '#dcfce7', color: '#15803d' },
+    Closed: { backgroundColor: '#e2e8f0', color: '#475569' },
+  }
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 8px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 600,
+    ...(map[status] ?? map.Pending),
+  }
+}
+
+function severityPill(level) {
+  const map = {
+    Low: { backgroundColor: '#dbeafe', color: '#2563eb' },
+    Medium: { backgroundColor: '#fef3c7', color: '#d97706' },
+    High: { backgroundColor: '#fee2e2', color: '#dc2626' },
+    Critical: { backgroundColor: '#fce7f3', color: '#be185d' },
+  }
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 8px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 600,
+    ...(map[level] ?? map.Low),
+  }
 }

@@ -11,6 +11,8 @@ import DashboardPage from './pages/DashboardPage'
 import RecallListPage from './pages/RecallListPage'
 import ShortListPage from './pages/ShortListPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import RecallReviewPage from './pages/RecallReviewPage'
+import PrioritizationPage from './pages/PrioritizationPage'
 
 function AuthenticatedLayout({ children }) {
   return (
@@ -50,6 +52,26 @@ export default function App() {
               <ProtectedRoute>
                 <AuthenticatedLayout>
                   <RecallListPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recalls/:recallId"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <RecallReviewPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recalls/:recallId/prioritize"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <PrioritizationPage />
                 </AuthenticatedLayout>
               </ProtectedRoute>
             }

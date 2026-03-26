@@ -6,9 +6,62 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Recall, ShortList
-from schemas import RecallListResponse, RecallOut
+from schemas import RecallCreate, RecallListResponse, RecallOut
 
 router = APIRouter(prefix="/api/recalls", tags=["Recalls"])
+
+
+@router.post("", response_model=RecallOut, status_code=status.HTTP_201_CREATED)
+def create_recall(payload: RecallCreate, db: Session = Depends(get_db)):
+    required_fields = {
+        "productName": payload.productName,
+        "manufacturerName": payload.manufacturerName,
+        "hazard": payload.hazard,
+        "recallURL": payload.recallURL,
+        "remedy": payload.remedy,
+        "units": payload.units,
+        "soldAt": payload.soldAt,
+    }
+
+    missing_fields = [
+        field_name
+        for field_name, field_value in required_fields.items()
+        if not str(field_value).strip()
+    ]
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="All recall fields are required before the record can be created.",
+        )
+
+    recall = Recall(
+        productName=payload.productName.strip(),
+        manufacturerName=payload.manufacturerName.strip(),
+        hazard=payload.hazard.strip(),
+        recallDate=payload.recallDate,
+        recallURL=payload.recallURL.strip(),
+        remedy=payload.remedy.strip(),
+        units=payload.units.strip(),
+        soldAt=payload.soldAt.strip(),
+    )
+
+    db.add(recall)
+    db.commit()
+    db.refresh(recall)
+
+    return RecallOut(
+        recallID=recall.recallID,
+        productName=recall.productName,
+        manufacturerName=recall.manufacturerName,
+        hazard=recall.hazard,
+        recallDate=recall.recallDate,
+        recallURL=recall.recallURL,
+        remedy=recall.remedy,
+        units=recall.units,
+        soldAt=recall.soldAt,
+        isShortlisted=False,
+    )
 
 
 @router.get("", response_model=RecallListResponse)

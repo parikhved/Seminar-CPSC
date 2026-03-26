@@ -43,6 +43,17 @@ class RecallListResponse(BaseModel):
     pages: int
 
 
+class RecallCreate(BaseModel):
+    productName: str
+    manufacturerName: str
+    hazard: str
+    recallDate: date
+    recallURL: str
+    remedy: str
+    units: str
+    soldAt: str
+
+
 # ── ShortList ─────────────────────────────────────────────────────────────────
 
 class ShortListCreate(BaseModel):
