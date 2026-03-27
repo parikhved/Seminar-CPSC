@@ -65,7 +65,6 @@ export default function EditShortListModal({ item, onClose, onSuccess }) {
               onChange={(e) => setPriorityLevel(e.target.value)}
               style={selectStyle}
             >
-              <option value="">— Select severity level —</option>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}

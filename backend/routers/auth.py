@@ -32,24 +32,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         if not password_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Password is incorrect.",
+                detail="Email or Password is incorrect.",
             )
 
     else:
-        password_matches_any_user = normalized_password == DEMO_PASSWORD or (
-            db.query(User.userID).filter(User.password == normalized_password).first()
-            is not None
-        )
-
-        if password_matches_any_user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Username is incorrect.",
-            )
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials.",
+            detail="Email or Password is incorrect.",
         )
 
     if user.role != "Manager":

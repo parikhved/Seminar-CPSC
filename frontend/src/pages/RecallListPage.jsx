@@ -63,7 +63,7 @@ export default function RecallListPage() {
       const shortlistByRecallId = new Map(shortlistRes.data.map((item) => [item.recallID, item]))
       const enrichedRecalls = recallsRes.data.recalls.map((recall) => {
         const shortlistItem = shortlistByRecallId.get(recall.recallID)
-        const severity = shortlistItem?.priorityLevel ?? deriveSeverity(recall.hazard)
+        const severity = shortlistItem?.priorityLevel ?? null
         const status = shortlistItem ? deriveStatus(shortlistItem.priorityLevel) : 'Pending'
 
         return {
@@ -75,6 +75,8 @@ export default function RecallListPage() {
       })
 
       setRecalls(enrichedRecalls)
+    } catch {
+      showToast('Failed to load recalls. The server may be starting up — try again in a moment.', 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -234,13 +236,6 @@ function summarizeRecalls(recalls) {
     pending: recalls.filter((item) => item.status === 'Pending').length,
     resolved: recalls.filter((item) => item.status === 'Resolved').length,
   }
-}
-
-function deriveSeverity(hazard = '') {
-  const normalized = hazard.toLowerCase()
-  if (/fatal|fire|smolder|shock|electroc|lead|toxic/.test(normalized)) return 'High'
-  if (/injury|fall|brake|burn|crush|entrapment/.test(normalized)) return 'Medium'
-  return 'Low'
 }
 
 function deriveStatus(priorityLevel) {

@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -34,6 +35,8 @@ export default function DashboardPage() {
         })
 
         setDashboard(buildDashboard(recalls))
+      } catch {
+        setError(true)
       } finally {
         setLoading(false)
       }
@@ -43,6 +46,13 @@ export default function DashboardPage() {
   }, [])
 
   if (loading) return <LoadingSpinner />
+  if (error || !dashboard) return (
+    <div style={{ padding: 32 }}>
+      <p style={{ color: '#b91c1c', fontSize: 15 }}>
+        Unable to load dashboard data. The server may be starting up — please refresh in a moment.
+      </p>
+    </div>
+  )
 
   return (
     <div style={page}>
@@ -93,8 +103,12 @@ export default function DashboardPage() {
             <h3 style={subheading}>Quick Actions</h3>
             <div style={quickActionGrid}>
               <QuickAction label="Import / View Recalls" tint="#dbeafe" to="/recalls" />
-              <QuickAction label="View Recall" tint="#dbeafe" to={`/recalls/${dashboard.featuredRecallId}`} />
-              <QuickAction label="Prioritize Recalls" tint="#fee2e2" to={`/recalls/${dashboard.featuredRecallId}/prioritize`} />
+              {dashboard.featuredRecallId ? (
+                <QuickAction label="View Recall" tint="#dbeafe" to={`/recalls/${dashboard.featuredRecallId}`} />
+              ) : null}
+              {dashboard.featuredRecallId ? (
+                <QuickAction label="Prioritize Recalls" tint="#fee2e2" to={`/recalls/${dashboard.featuredRecallId}/prioritize`} />
+              ) : null}
               <button
                 type="button"
                 style={{ ...quickButton, backgroundColor: '#dcfce7' }}

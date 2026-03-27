@@ -15,6 +15,7 @@ export default function RecallReviewPage() {
   const [recall, setRecall] = useState(null)
   const [shortlistEntry, setShortlistEntry] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -28,6 +29,8 @@ export default function RecallReviewPage() {
         setShortlistEntry(
           shortlistRes.data.find((item) => String(item.recallID) === String(recallId)) ?? null,
         )
+      } catch {
+        setError(true)
       } finally {
         setLoading(false)
       }
@@ -37,7 +40,13 @@ export default function RecallReviewPage() {
   }, [recallId])
 
   if (loading) return <LoadingSpinner />
-  if (!recall) return null
+  if (error || !recall) return (
+    <div style={{ padding: 32 }}>
+      <p style={{ color: '#b91c1c', fontSize: 15 }}>
+        Unable to load recall details. The server may be starting up — please try again in a moment.
+      </p>
+    </div>
+  )
 
   const severity = shortlistEntry?.priorityLevel ?? deriveSeverity(recall.hazard)
   const incidents = deriveIncidentMetrics(recall, severity)

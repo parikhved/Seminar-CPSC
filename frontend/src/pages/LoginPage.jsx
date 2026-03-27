@@ -22,7 +22,11 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail ?? 'Unable to sign in.')
+      if (!err.response) {
+        setError('Server is unavailable or starting up — please wait 30 seconds and try again.')
+      } else {
+        setError(err.response.data?.detail ?? 'Unable to sign in.')
+      }
     } finally {
       setLoading(false)
     }

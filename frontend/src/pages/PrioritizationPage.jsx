@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { showToast } from '../components/NotificationToast'
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
+const NOTES_MAX = 500
 
 function formatDate(d) {
   if (!d) return 'N/A'
@@ -23,6 +24,7 @@ export default function PrioritizationPage() {
   const [priorityLevel, setPriorityLevel] = useState('High')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -39,7 +41,9 @@ export default function PrioritizationPage() {
         setRecall(recallRes.data)
         setExistingShortlist(entry)
         setPriorityLevel(entry?.priorityLevel ?? deriveSeverity(recallRes.data.hazard))
-        setNotes(entry?.notes ?? buildInitialJustification(recallRes.data))
+        setNotes(entry?.notes ?? '')
+      } catch {
+        setLoadError(true)
       } finally {
         setLoading(false)
       }
@@ -47,8 +51,6 @@ export default function PrioritizationPage() {
 
     load()
   }, [recallId])
-
-  const isValid = useMemo(() => notes.trim().length >= 30, [notes])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -59,8 +61,8 @@ export default function PrioritizationPage() {
       return
     }
 
-    if (!isValid) {
-      setError('Provide a more complete prioritization justification before submitting.')
+    if (notes.length > NOTES_MAX) {
+      setError(`Notes exceed ${NOTES_MAX} character limit.`)
       return
     }
 
@@ -93,7 +95,13 @@ export default function PrioritizationPage() {
   }
 
   if (loading) return <LoadingSpinner />
-  if (!recall) return null
+  if (loadError || !recall) return (
+    <div style={{ padding: 32 }}>
+      <p style={{ color: '#b91c1c', fontSize: 15 }}>
+        Unable to load recall details. The server may be starting up — please try again in a moment.
+      </p>
+    </div>
+  )
 
   return (
     <div style={page}>
@@ -139,9 +147,15 @@ export default function PrioritizationPage() {
               onChange={(e) => setNotes(e.target.value)}
               style={{ ...input, resize: 'vertical', paddingTop: 14 }}
             />
-            <div style={isValid ? helperValid : helperMuted}>
-              <CheckCircle2 size={16} />
-              {isValid ? 'Valid justification provided' : 'Add more decision context to meet the review threshold'}
+            <div style={notes.length > NOTES_MAX ? helperWarning : helperMuted}>
+              {notes.length > NOTES_MAX ? (
+                <>
+                  <AlertTriangle size={16} />
+                  Notes exceed {NOTES_MAX} character limit
+                </>
+              ) : (
+                `${notes.length} / ${NOTES_MAX} characters`
+              )}
             </div>
           </div>
 
@@ -200,15 +214,6 @@ function deriveSeverity(hazard = '') {
   if (/lead|shock|fire|fatal|smolder/.test(normalized)) return 'High'
   if (/brake|fall|burn|injury|crush|entrapment/.test(normalized)) return 'Medium'
   return 'Low'
-}
-
-function buildInitialJustification(recall) {
-  return `The recall for ${recall.productName} requires review because ${lowerFirst(recall.hazard || 'the safety issue may impact consumers')}. Distribution across ${recall.soldAt || 'multiple sales channels'} increases the need for immediate manager attention.`
-}
-
-function lowerFirst(value) {
-  if (!value) return value
-  return value.charAt(0).toLowerCase() + value.slice(1)
 }
 
 const page = {
@@ -318,16 +323,6 @@ const helperWarning = {
   alignItems: 'center',
   gap: 8,
   color: '#dc2626',
-  fontSize: 14,
-  fontWeight: 600,
-}
-
-const helperValid = {
-  marginTop: 10,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  color: '#16a34a',
   fontSize: 14,
   fontWeight: 600,
 }
