@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, recalls, shortlist
+from routers import analytics, auth, recalls, shortlist
 
 app = FastAPI(
     title="CPSC Compliance & Analytics API",
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(recalls.router)
 app.include_router(shortlist.router)
+app.include_router(analytics.router)
 
 
 # ── Root Endpoints ────────────────────────────────────────────────────────────
