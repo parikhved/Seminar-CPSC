@@ -1,22 +1,26 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { BarChart3, FileSearch, LayoutDashboard, ShieldAlert } from 'lucide-react'
+import { BarChart3, FileSearch, LayoutDashboard, ShieldAlert, Siren } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
   { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
+  { label: 'Violation Logging', icon: Siren, path: '/violations' },
   { label: 'Analytics', icon: BarChart3, path: '/analytics' },
 ]
 
 export default function Sidebar() {
+  const { user } = useAuth()
+
   return (
     <aside style={aside}>
       <div style={brandCard}>
         <div style={logoWrap}>CPSC</div>
         <div>
           <div style={brandTitle}>Recall Management System</div>
-          <div style={brandSubtitle}>Manager workspace</div>
+          <div style={brandSubtitle}>{user?.role || 'Compliance'} workspace</div>
         </div>
       </div>
 
@@ -31,10 +35,10 @@ export default function Sidebar() {
 
       <div style={footerCard}>
         <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Sprint 1
+          Marketplace MVP
         </div>
         <div style={{ marginTop: 8, fontSize: 14, color: '#e2e8f0', lineHeight: 1.5 }}>
-          Prioritize high-risk recalls and keep investigator workflows moving.
+          Detect recalled products on eBay, log violations, and keep seller outreach moving.
         </div>
       </div>
     </aside>

@@ -15,8 +15,8 @@ export default function Navbar() {
   return (
     <header style={header}>
       <div>
-        <div style={eyebrow}>CPSC Manager Console</div>
-        <div style={heading}>Recall prioritization workspace</div>
+        <div style={eyebrow}>CPSC Compliance Console</div>
+        <div style={heading}>{user?.role === 'Investigator' ? 'Marketplace enforcement workspace' : 'Recall operations workspace'}</div>
       </div>
 
       <div style={rightSide}>

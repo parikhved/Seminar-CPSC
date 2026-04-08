@@ -2,7 +2,7 @@
 
 **Team 2 | BIT 4454 — Virginia Tech | Spring 2026**
 
-Recall Prioritization System for the Consumer Product Safety Commission (CPSC). Sprint 1 establishes structured intake and prioritization of recall records so investigators can focus on the highest-risk violations.
+Recall Prioritization System for the Consumer Product Safety Commission (CPSC). The current MVP supports recall review, marketplace comparison against eBay listings, violation logging, reporting, and seller notification workflows.
 
 ---
 
@@ -43,7 +43,8 @@ Recall Prioritization System for the Consumer Product Safety Commission (CPSC). 
 2. Navigate to **SQL Editor**.
 3. Run `database/schema.sql` (creates all 9 tables).
 4. Run `database/seed.sql` (inserts seed data).
-5. Copy your connection string from **Settings → Database → Connection string (URI)**.
+5. If you already have an existing database from the earlier MVP, run `database/migrations/2026-04-08_marketplace_violation_mvp.sql` instead of resetting everything.
+6. Copy your connection string from **Settings → Database → Connection string (URI)**.
 
 ### 2. Backend (FastAPI)
 
@@ -79,6 +80,8 @@ Frontend will be available at http://localhost:5173
 **Demo login:**
 - Email: `emily.carter@cpsc-sim.gov`
 - Password: `demo123`
+- Investigator Email: `daniel.kim@cpsc-investigator.gov`
+- Password: `demo123`
 
 ---
 
@@ -87,6 +90,19 @@ Frontend will be available at http://localhost:5173
 ### Backend (`backend/.env`)
 ```
 DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+FRONTEND_URL=http://localhost:5173
+
+EBAY_ENV=production
+EBAY_MARKETPLACE_ID=EBAY_US
+EBAY_CLIENT_ID=your-ebay-client-id
+EBAY_CLIENT_SECRET=your-ebay-client-secret
+
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM=no-reply@cpsc.gov
+SMTP_USE_TLS=true
 ```
 
 ### Frontend (`frontend/.env`)
@@ -100,7 +116,7 @@ VITE_API_URL=http://localhost:8000
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/login` | Manager login |
+| POST | `/api/auth/login` | Manager or investigator login |
 | GET | `/api/recalls` | List all recalls (paginated, searchable) |
 | GET | `/api/recalls/count` | Total recall count |
 | GET | `/api/recalls/{id}` | Single recall |
@@ -109,6 +125,9 @@ VITE_API_URL=http://localhost:8000
 | PUT | `/api/shortlist/{id}` | Update shortlist entry |
 | DELETE | `/api/shortlist/{id}` | Remove from shortlist |
 | GET | `/api/shortlist/analytics/okr` | OKR metrics |
+| GET | `/api/violations` | List logged violations |
+| POST | `/api/violations/scan-ebay` | Search eBay listings for a recall |
+| POST | `/api/violations` | Log a violation and send seller notification |
 | GET | `/health` | Health check |
 
 ---
@@ -150,7 +169,7 @@ Update `backend/main.py` CORS `allow_origins` list to include your actual Vercel
 
 ## Sprint 1 Scope
 
-**User Story:** As a CPSC Manager, I need to prioritize high priority product recalls so investigators can focus on the highest risk violations.
+**Current MVP User Story:** As a CPSC Investigator, I need to identify recalled products in online marketplaces and log violations so unsafe products can be removed.
 
 **OKR 1.1 — Increase High Priority Recall Shortlisting**
 - Baseline: 122 shortlisted recalls/quarter
@@ -161,9 +180,13 @@ Update `backend/main.py` CORS `allow_origins` list to include your actual Vercel
 - Target: 50 complete records (20% relative improvement)
 
 **Deliverables:**
-1. Chart 1: High Priority Recalls Shortlisted per Quarter (baseline vs current vs target)
-2. Chart 2: Percentage of Shortlisted Recalls with Complete Severity and Risk Fields
-3. Email Automation: Investigator notification simulated via toast on shortlist add
+1. eBay listing comparison against recalled products
+2. Violation logging page connected to the database
+3. Validation for required violation fields before insertion
+4. Seller email notification after logging
+5. Reporting view of logged violations
+
+**Implementation Note:** eBay Browse API powers marketplace search and listing retrieval. Seller email is not returned by that API, so the investigator supplies or maps the seller email inside the violation logging flow before notification is sent.
 
 ---
 

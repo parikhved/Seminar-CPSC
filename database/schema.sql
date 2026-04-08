@@ -74,16 +74,22 @@ CREATE TABLE api (
 -- productListing table
 -- ============================================================
 CREATE TABLE "productListing" (
-    "listingID"   SERIAL PRIMARY KEY,
-    "modelNum"    VARCHAR(50),
-    "listingTitle" VARCHAR(200),
-    "listingDate"  DATE,
-    "listingURL"   VARCHAR(200),
-    "price"        DECIMAL(10, 2),
-    "listingDesc"  TEXT,
-    "address"      VARCHAR(100),
-    "isActive"     BOOLEAN  DEFAULT TRUE,
-    "sellerUserID" INTEGER  REFERENCES "user"("userID")
+    "listingID"         SERIAL PRIMARY KEY,
+    "modelNum"          VARCHAR(50),
+    "listingTitle"      VARCHAR(200),
+    "listingDate"       DATE,
+    "listingURL"        VARCHAR(500),
+    "price"             DECIMAL(10, 2),
+    "currency"          VARCHAR(10),
+    "listingDesc"       TEXT,
+    "address"           VARCHAR(100),
+    "marketplaceName"   VARCHAR(50) NOT NULL DEFAULT 'eBay',
+    "externalListingId" VARCHAR(80) UNIQUE,
+    "sellerName"        VARCHAR(120),
+    "sellerEmail"       VARCHAR(120),
+    "imageURL"          VARCHAR(500),
+    "isActive"          BOOLEAN  DEFAULT TRUE,
+    "sellerUserID"      INTEGER  REFERENCES "user"("userID")
 );
 
 -- ============================================================

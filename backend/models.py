@@ -1,7 +1,4 @@
-from sqlalchemy import (
-    Boolean, Column, Date, ForeignKey,
-    Integer, Numeric, String, Text, UniqueConstraint
-)
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -19,6 +16,16 @@ class User(Base):
 
     shortlists  = relationship("ShortList",      back_populates="manager",      foreign_keys="ShortList.managerUserID")
     listings    = relationship("ProductListing", back_populates="seller",       foreign_keys="ProductListing.sellerUserID")
+    detected_violations = relationship(
+        "Violation",
+        back_populates="investigator",
+        foreign_keys="Violation.investigatorID",
+    )
+    received_violations = relationship(
+        "Violation",
+        back_populates="recipient",
+        foreign_keys="Violation.receivedByID",
+    )
 
 
 class Recall(Base):
@@ -35,6 +42,7 @@ class Recall(Base):
     soldAt           = Column("soldAt",           String(500))
 
     shortlist_entry = relationship("ShortList", back_populates="recall", uselist=False)
+    violations = relationship("Violation", back_populates="recall")
 
 
 class ShortList(Base):
@@ -69,18 +77,25 @@ class Api(Base):
 class ProductListing(Base):
     __tablename__ = "productListing"
 
-    listingID    = Column("listingID",    Integer,         primary_key=True, index=True)
-    modelNum     = Column("modelNum",     String(50))
-    listingTitle = Column("listingTitle", String(200))
-    listingDate  = Column("listingDate",  Date)
-    listingURL   = Column("listingURL",   String(200))
-    price        = Column("price",        Numeric(10, 2))
-    listingDesc  = Column("listingDesc",  Text)
-    address      = Column("address",      String(100))
-    isActive     = Column("isActive",     Boolean,         default=True)
-    sellerUserID = Column("sellerUserID", Integer,         ForeignKey("user.userID"))
+    listingID          = Column("listingID",          Integer,         primary_key=True, index=True)
+    modelNum           = Column("modelNum",           String(50))
+    listingTitle       = Column("listingTitle",       String(200))
+    listingDate        = Column("listingDate",        Date)
+    listingURL         = Column("listingURL",         String(500))
+    price              = Column("price",              Numeric(10, 2))
+    currency           = Column("currency",           String(10))
+    listingDesc        = Column("listingDesc",        Text)
+    address            = Column("address",            String(100))
+    marketplaceName    = Column("marketplaceName",    String(50),      nullable=False, default="eBay")
+    externalListingId  = Column("externalListingId",  String(80),      unique=True)
+    sellerName         = Column("sellerName",         String(120))
+    sellerEmail        = Column("sellerEmail",        String(120))
+    imageURL           = Column("imageURL",           String(500))
+    isActive           = Column("isActive",           Boolean,         default=True)
+    sellerUserID       = Column("sellerUserID",       Integer,         ForeignKey("user.userID"))
 
     seller = relationship("User", back_populates="listings", foreign_keys=[sellerUserID])
+    violations = relationship("Violation", back_populates="listing")
 
 
 class Violation(Base):
@@ -96,6 +111,11 @@ class Violation(Base):
     receivedByID      = Column("receivedByID",      Integer,  ForeignKey("user.userID"))
     recallID          = Column("recallID",          Integer,  ForeignKey("recall.recallID"))
     listingID         = Column("listingID",         Integer,  ForeignKey("productListing.listingID"))
+
+    investigator = relationship("User", back_populates="detected_violations", foreign_keys=[investigatorID])
+    recipient = relationship("User", back_populates="received_violations", foreign_keys=[receivedByID])
+    recall = relationship("Recall", back_populates="violations")
+    listing = relationship("ProductListing", back_populates="violations")
 
 
 class SellerResponse(Base):

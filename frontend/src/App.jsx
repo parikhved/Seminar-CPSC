@@ -13,6 +13,7 @@ import ShortListPage from './pages/ShortListPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import RecallReviewPage from './pages/RecallReviewPage'
 import PrioritizationPage from './pages/PrioritizationPage'
+import ViolationLoggingPage from './pages/ViolationLoggingPage'
 
 function AuthenticatedLayout({ children }) {
   return (
@@ -92,6 +93,16 @@ export default function App() {
               <ProtectedRoute>
                 <AuthenticatedLayout>
                   <AnalyticsPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/violations"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <ViolationLoggingPage />
                 </AuthenticatedLayout>
               </ProtectedRoute>
             }

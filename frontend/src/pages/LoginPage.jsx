@@ -19,8 +19,8 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(email, password)
-      navigate('/dashboard')
+      const data = await login(email, password)
+      navigate(data.role === 'Investigator' ? '/violations' : '/dashboard')
     } catch (err) {
       if (!err.response) {
         setError('Server is unavailable or starting up — please wait 30 seconds and try again.')
@@ -69,7 +69,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="manager@cpsc.gov"
+                  placeholder="investigator@cpsc.gov"
                   required
                   style={input}
                 />
@@ -116,6 +116,7 @@ export default function LoginPage() {
             <div style={demoHeading}>Demo Credentials</div>
             <div style={demoValue}>Email: emily.carter@cpsc-sim.gov</div>
             <div style={demoValue}>Password: demo123</div>
+            <div style={{ ...demoValue, marginTop: 10 }}>Investigator: daniel.kim@cpsc-investigator.gov</div>
           </div>
         </div>
 
