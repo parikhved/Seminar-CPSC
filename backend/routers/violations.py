@@ -89,9 +89,8 @@ def _raise_schema_error(exc: Exception, db: Session) -> None:
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=(
             "Violation data could not be loaded because the database schema is behind the Sprint 2 app. "
-            "Run database/migrations/2026-04-08_marketplace_violation_mvp.sql and "
-            "database/migrations/2026-04-08_violation_evidence.sql and "
-            "database/migrations/2026-04-08_seller_response_evidence.sql or redeploy against an updated database."
+            "Run database/migrations/2026-04-08_sprint2_sync.sql "
+            "(or the three individual Sprint 2 migration files) and redeploy against the updated database."
         ),
     ) from exc
 

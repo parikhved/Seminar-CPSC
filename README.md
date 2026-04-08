@@ -43,7 +43,7 @@ Recall Prioritization System for the Consumer Product Safety Commission (CPSC). 
 2. Navigate to **SQL Editor**.
 3. Run `database/schema.sql` (creates all 9 tables).
 4. Run `database/seed.sql` (inserts seed data).
-5. If you already have an existing database from the earlier MVP, run `database/migrations/2026-04-08_marketplace_violation_mvp.sql`, `database/migrations/2026-04-08_violation_evidence.sql`, and `database/migrations/2026-04-08_seller_response_evidence.sql` instead of resetting everything.
+5. If you already have an existing database from the earlier MVP, run `database/migrations/2026-04-08_sprint2_sync.sql` instead of resetting everything. You can also run the three individual Sprint 2 migration files if you prefer.
 6. Copy your connection string from **Settings → Database → Connection string (URI)**.
 
 ### 2. Backend (FastAPI)
