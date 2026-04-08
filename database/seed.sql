@@ -1,5 +1,5 @@
 -- CPSC Compliance & Analytics Unit — Seed Data
--- Sprint 1: Recall Prioritization System
+-- Sprint 2: Marketplace Violation Detection System
 
 -- ============================================================
 -- Users (10 rows)

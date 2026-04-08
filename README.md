@@ -1,4 +1,4 @@
-# CPSC Compliance & Analytics Unit — Sprint 1
+# CPSC Compliance & Analytics Unit — Sprint 2
 
 **Team 2 | BIT 4454 — Virginia Tech | Spring 2026**
 
@@ -167,7 +167,7 @@ Update `backend/main.py` CORS `allow_origins` list to include your actual Vercel
 
 ---
 
-## Sprint 1 Scope
+## Sprint 2 Scope
 
 **Current MVP User Story:** As a CPSC Investigator, I need to identify recalled products in online marketplaces and log violations so unsafe products can be removed.
 

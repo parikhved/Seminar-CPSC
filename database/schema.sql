@@ -1,5 +1,5 @@
 -- CPSC Compliance & Analytics Unit — Database Schema
--- Sprint 1: Recall Prioritization System
+-- Sprint 2: Marketplace Violation Detection System
 -- All column names use camelCase as specified in the ERD
 
 -- Drop tables in reverse dependency order (for clean re-runs)

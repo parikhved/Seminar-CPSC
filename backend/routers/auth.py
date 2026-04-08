@@ -47,7 +47,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Access restricted to CPSC Managers and Investigators.",
         )
 
-    token = f"sprint1-token-{user.userID}-{user.email}"
+    token = f"sprint2-token-{user.userID}-{user.email}"
 
     return LoginResponse(
         userID=user.userID,
