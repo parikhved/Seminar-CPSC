@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
 import { ArrowRight, Headset, Lock, Mail, Phone } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,8 +20,9 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const data = await login(email, password)
-      navigate(data.role === 'Investigator' ? '/violations' : '/dashboard')
+      await login(email, password)
+      const nextPath = location.state?.from
+      navigate(nextPath || '/dashboard')
     } catch (err) {
       if (!err.response) {
         setError('Server is unavailable or starting up — please wait 30 seconds and try again.')
@@ -117,6 +119,7 @@ export default function LoginPage() {
             <div style={demoValue}>Email: emily.carter@cpsc-sim.gov</div>
             <div style={demoValue}>Password: demo123</div>
             <div style={{ ...demoValue, marginTop: 10 }}>Investigator: daniel.kim@cpsc-investigator.gov</div>
+            <div style={demoValue}>Seller: priya.shah@gmail.com</div>
           </div>
         </div>
 

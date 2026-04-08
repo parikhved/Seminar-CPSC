@@ -16,6 +16,7 @@ export default function RecallTable({
   onViewRecall,
   onPrioritizeRecall,
   shortlistedIds = new Set(),
+  showPrioritizeAction = true,
 }) {
   const TH = ({ children, align = 'left' }) => (
     <th
@@ -92,13 +93,15 @@ export default function RecallTable({
                         <Eye size={13} />
                         View
                       </button>
-                      <button
-                        onClick={() => onPrioritizeRecall(r)}
-                        style={listed ? listedActionBtn : primaryActionBtn}
-                      >
-                        <ArrowRight size={13} />
-                        {listed ? 'Update' : 'Prioritize'}
-                      </button>
+                      {showPrioritizeAction ? (
+                        <button
+                          onClick={() => onPrioritizeRecall(r)}
+                          style={listed ? listedActionBtn : primaryActionBtn}
+                        >
+                          <ArrowRight size={13} />
+                          {listed ? 'Update' : 'Prioritize'}
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

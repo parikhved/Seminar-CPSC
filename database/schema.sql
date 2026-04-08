@@ -100,6 +100,7 @@ CREATE TABLE violation (
     "isViolation"       BOOLEAN,
     "violationStatus"   VARCHAR(200),
     "message"           TEXT,
+    "evidenceURL"       VARCHAR(500),
     "dateDetected"      DATE,
     "investigatorNotes" TEXT,
     "investigatorID"    INTEGER REFERENCES "user"("userID"),
@@ -114,7 +115,7 @@ CREATE TABLE violation (
 CREATE TABLE "sellerResponse" (
     "responseID"   SERIAL PRIMARY KEY,
     "response"     VARCHAR(400),
-    "evidenceURL"  VARCHAR(100),
+    "evidenceURL"  VARCHAR(500),
     "dateResponded" DATE,
     "violationID"  INTEGER REFERENCES violation("violationID"),
     "sellerUserID" INTEGER REFERENCES "user"("userID")

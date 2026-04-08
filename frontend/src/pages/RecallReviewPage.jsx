@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight, ExternalLink, ShieldAlert } from 'lucide-rea
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useAuth } from '../context/AuthContext'
 
 function formatDate(d) {
   if (!d) return 'N/A'
@@ -12,6 +13,7 @@ function formatDate(d) {
 export default function RecallReviewPage() {
   const { recallId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [recall, setRecall] = useState(null)
   const [shortlistEntry, setShortlistEntry] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -50,6 +52,7 @@ export default function RecallReviewPage() {
 
   const severity = shortlistEntry?.priorityLevel ?? deriveSeverity(recall.hazard)
   const incidents = deriveIncidentMetrics(recall, severity)
+  const isInvestigator = user?.role === 'Investigator'
 
   return (
     <div style={page}>
@@ -59,10 +62,12 @@ export default function RecallReviewPage() {
           <h1 style={title}>{recall.productName}</h1>
         </div>
 
-        <button onClick={() => navigate(`/recalls/${recall.recallID}/prioritize`)} style={actionBtn}>
-          <ShieldAlert size={16} />
-          {shortlistEntry ? 'Update Prioritization' : 'Prioritize Recall'}
-        </button>
+        {!isInvestigator ? (
+          <button onClick={() => navigate(`/recalls/${recall.recallID}/prioritize`)} style={actionBtn}>
+            <ShieldAlert size={16} />
+            {shortlistEntry ? 'Update Prioritization' : 'Prioritize Recall'}
+          </button>
+        ) : null}
       </div>
 
       <div style={layout}>
@@ -103,10 +108,12 @@ export default function RecallReviewPage() {
 
           <div style={ctaRow}>
             <Link to="/recalls" style={secondaryLink}>Back to Recalls</Link>
-            <button onClick={() => navigate(`/recalls/${recall.recallID}/prioritize`)} style={primaryLinkBtn}>
-              Continue to Prioritization
-              <ArrowRight size={16} />
-            </button>
+            {!isInvestigator ? (
+              <button onClick={() => navigate(`/recalls/${recall.recallID}/prioritize`)} style={primaryLinkBtn}>
+                Continue to Prioritization
+                <ArrowRight size={16} />
+              </button>
+            ) : null}
           </div>
         </div>
 

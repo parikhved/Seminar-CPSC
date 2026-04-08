@@ -95,6 +95,13 @@ export default function PrioritizationPage() {
   }
 
   if (loading) return <LoadingSpinner />
+  if (user?.role === 'Investigator') return (
+    <div style={{ padding: 32 }}>
+      <p style={{ color: '#b91c1c', fontSize: 15 }}>
+        Prioritization is restricted to managers. Investigators can review recalls and continue work from the Violation List.
+      </p>
+    </div>
+  )
   if (loadError || !recall) return (
     <div style={{ padding: 32 }}>
       <p style={{ color: '#b91c1c', fontSize: 15 }}>

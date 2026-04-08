@@ -145,6 +145,19 @@ class EbayScanResponse(BaseModel):
     candidates: List[DetectedListingOut] = Field(default_factory=list)
 
 
+class ViolationShortlistSearchRequest(BaseModel):
+    investigatorID: int
+    limitPerRecall: int = Field(default=8, ge=1, le=20)
+    minScore: float = Field(default=0.45, ge=0, le=1)
+
+
+class ViolationShortlistSearchResponse(BaseModel):
+    newViolationsFound: int
+    searchedRecalls: int
+    duplicateMatchesSkipped: int
+    scannedKeywords: List[str] = Field(default_factory=list)
+
+
 class ViolationListingPayload(BaseModel):
     externalListingId: str
     listingTitle: str
@@ -166,9 +179,16 @@ class ViolationCreate(BaseModel):
     investigatorID: int
     violationStatus: str
     message: str
+    evidenceURL: str
     investigatorNotes: str
     receivedByID: Optional[int] = None
     listing: ViolationListingPayload
+
+
+class ViolationUpdate(BaseModel):
+    matchConfirmation: bool
+    violationDescription: str = Field(default="", max_length=500)
+    status: str
 
 
 class ViolationOut(BaseModel):
@@ -176,6 +196,7 @@ class ViolationOut(BaseModel):
     isViolation: bool
     violationStatus: Optional[str] = None
     message: Optional[str] = None
+    evidenceURL: Optional[str] = None
     dateDetected: Optional[date] = None
     investigatorNotes: Optional[str] = None
     investigatorID: Optional[int] = None
@@ -193,6 +214,17 @@ class ViolationOut(BaseModel):
     sellerEmail: Optional[str] = None
     price: Optional[float] = None
     currency: Optional[str] = None
+    shortListID: Optional[int] = None
+    productName: Optional[str] = None
+    matchConfirmation: Optional[bool] = None
+    URL: Optional[str] = None
+    seller: Optional[str] = None
+    sellerID: Optional[int] = None
+    violationDate: Optional[date] = None
+    violationDescription: Optional[str] = None
+    status: Optional[str] = None
+    marketplaceSource: Optional[str] = None
+    documentationComplete: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -200,3 +232,66 @@ class ViolationOut(BaseModel):
 class ViolationCreateResponse(ViolationOut):
     notificationStatus: str
     notificationDetail: str
+
+
+class SellerResponseCreate(BaseModel):
+    sellerUserID: int
+    response: str
+    evidenceURL: str
+
+
+class SellerResponseOut(BaseModel):
+    responseID: int
+    response: Optional[str] = None
+    evidenceURL: Optional[str] = None
+    dateResponded: Optional[date] = None
+    violationID: int
+    sellerUserID: int
+
+    model_config = {"from_attributes": True}
+
+
+class SellerViolationNoticeOut(BaseModel):
+    violationID: int
+    violationStatus: Optional[str] = None
+    message: Optional[str] = None
+    evidenceURL: Optional[str] = None
+    dateDetected: Optional[date] = None
+    recallID: Optional[int] = None
+    recallProductName: Optional[str] = None
+    hazard: Optional[str] = None
+    listingID: Optional[int] = None
+    listingTitle: Optional[str] = None
+    listingURL: Optional[str] = None
+    marketplaceName: Optional[str] = None
+    sellerEmail: Optional[str] = None
+    investigatorName: Optional[str] = None
+    responseID: Optional[int] = None
+    sellerResponse: Optional[str] = None
+    responseEvidenceURL: Optional[str] = None
+    dateResponded: Optional[date] = None
+
+
+class ViolationWeeklyTrendPoint(BaseModel):
+    date: str
+    label: str
+    count: int
+
+
+class ViolationDocumentationMetrics(BaseModel):
+    complete: int
+    incomplete: int
+    percentageComplete: float
+
+
+class ViolationResolutionMetrics(BaseModel):
+    resolved: int
+    unresolved: int
+    percentageResolved: float
+
+
+class ViolationAnalyticsOverview(BaseModel):
+    newViolationsByDay: List[ViolationWeeklyTrendPoint] = Field(default_factory=list)
+    newViolationsTotal: int
+    documentationCompletion: ViolationDocumentationMetrics
+    resolutionRate: ViolationResolutionMetrics

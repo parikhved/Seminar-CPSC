@@ -8,6 +8,7 @@ import {
   Siren,
   Store,
 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -72,8 +73,24 @@ function getScoreTone(score) {
   return { background: '#dbeafe', color: '#1d4ed8' }
 }
 
+function getApiErrorMessage(error, fallbackMessage) {
+  const status = error?.response?.status
+  const detail = error?.response?.data?.detail
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  }
+
+  if (status === 404) {
+    return 'The violation API is not available on this backend yet. Restart or redeploy the Sprint 2 backend and try again.'
+  }
+
+  return fallbackMessage
+}
+
 export default function ViolationLoggingPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [recalls, setRecalls] = useState([])
   const [violations, setViolations] = useState([])
   const [selectedRecallId, setSelectedRecallId] = useState('')
@@ -83,39 +100,57 @@ export default function ViolationLoggingPage() {
   const [sellerEmail, setSellerEmail] = useState('')
   const [violationStatus, setViolationStatus] = useState('Logged')
   const [message, setMessage] = useState('')
+  const [evidenceURL, setEvidenceURL] = useState('')
   const [investigatorNotes, setInvestigatorNotes] = useState('')
   const [scanSummary, setScanSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [scanLoading, setScanLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [violationsError, setViolationsError] = useState('')
 
   const selectedRecall = recalls.find((item) => String(item.recallID) === String(selectedRecallId)) ?? null
   const stats = summarizeViolations(violations)
 
   useEffect(() => {
     async function load() {
-      try {
-        const [recallsRes, violationsRes] = await Promise.all([
-          api.get('/api/recalls', { params: { page: 1, limit: 100 } }),
-          api.get('/api/violations'),
-        ])
+      const [recallsResult, violationsResult] = await Promise.allSettled([
+        api.get('/api/recalls', { params: { page: 1, limit: 100 } }),
+        api.get('/api/violations'),
+      ])
 
-        const recallItems = recallsRes.data.recalls
+      if (recallsResult.status === 'fulfilled') {
+        const recallItems = recallsResult.value.data.recalls
         setRecalls(recallItems)
-        setViolations(violationsRes.data)
         if (recallItems.length) {
-          setSelectedRecallId(String(recallItems[0].recallID))
+          const requestedRecallId = searchParams.get('recallId')
+          const matchingRecall = requestedRecallId
+            ? recallItems.find((item) => String(item.recallID) === String(requestedRecallId))
+            : null
+          setSelectedRecallId(String(matchingRecall?.recallID ?? recallItems[0].recallID))
         }
-      } catch {
-        setError('Unable to load recalls and violations right now. Please refresh in a moment.')
-      } finally {
-        setLoading(false)
+      } else {
+        setError(getApiErrorMessage(recallsResult.reason, 'Unable to load recalls right now. Please refresh in a moment.'))
       }
+
+      if (violationsResult.status === 'fulfilled') {
+        setViolations(violationsResult.value.data)
+        setViolationsError('')
+      } else {
+        setViolations([])
+        setViolationsError(
+          getApiErrorMessage(
+            violationsResult.reason,
+            'Existing violation records could not be loaded right now.',
+          ),
+        )
+      }
+
+      setLoading(false)
     }
 
     load()
-  }, [])
+  }, [searchParams])
 
   function handleRecallChange(nextRecallId) {
     setSelectedRecallId(nextRecallId)
@@ -124,6 +159,7 @@ export default function ViolationLoggingPage() {
     setScanSummary(null)
     setSellerEmail('')
     setMessage('')
+    setEvidenceURL('')
     setInvestigatorNotes('')
     setError('')
   }
@@ -135,12 +171,20 @@ export default function ViolationLoggingPage() {
     setSellerEmail(candidate.sellerEmail || '')
     setViolationStatus('Logged')
     setMessage(buildViolationMessage(selectedRecall, candidate))
+    setEvidenceURL(candidate.imageURL || candidate.listingURL || '')
     setInvestigatorNotes(buildInvestigatorNotes(selectedRecall, candidate))
   }
 
   async function reloadViolations() {
-    const response = await api.get('/api/violations')
-    setViolations(response.data)
+    try {
+      const response = await api.get('/api/violations')
+      setViolations(response.data)
+      setViolationsError('')
+    } catch (err) {
+      setViolationsError(
+        getApiErrorMessage(err, 'Existing violation records could not be refreshed right now.'),
+      )
+    }
   }
 
   async function handleScan() {
@@ -170,6 +214,7 @@ export default function ViolationLoggingPage() {
         setSelectedCandidate(null)
         setSellerEmail('')
         setMessage('')
+        setEvidenceURL('')
         setInvestigatorNotes('')
       }
 
@@ -204,6 +249,7 @@ export default function ViolationLoggingPage() {
         investigatorID: user.userID,
         violationStatus,
         message: message.trim(),
+        evidenceURL: evidenceURL.trim(),
         investigatorNotes: investigatorNotes.trim(),
         listing: {
           externalListingId: selectedCandidate.externalListingId,
@@ -248,7 +294,7 @@ export default function ViolationLoggingPage() {
           <p style={eyebrow}>Investigator Workflow</p>
           <h1 style={title}>Marketplace Violation Logging</h1>
           <p style={subtitle}>
-            Search eBay for recalled products, confirm likely matches, log violations, and notify sellers from one screen.
+            Search eBay for recalled products, confirm likely matches, capture notes and evidence, log violations, and notify sellers from one screen.
           </p>
         </div>
 
@@ -450,6 +496,19 @@ export default function ViolationLoggingPage() {
                 </label>
 
                 <label style={fieldBlock}>
+                  <span style={label}>Evidence URL</span>
+                  <input
+                    type="url"
+                    value={evidenceURL}
+                    onChange={(event) => setEvidenceURL(event.target.value)}
+                    placeholder="listing image, screenshot, or case evidence link"
+                    style={input}
+                    required
+                  />
+                  <span style={helperText}>Attach the listing image or another investigation evidence link before saving.</span>
+                </label>
+
+                <label style={fieldBlock}>
                   <span style={label}>Investigator Notes</span>
                   <textarea
                     value={investigatorNotes}
@@ -475,15 +534,19 @@ export default function ViolationLoggingPage() {
         <div style={panelHeader}>
           <div>
             <h2 style={panelTitle}>3. Reporting</h2>
-            <p style={panelCopy}>Logged violations from the database are shown here for follow-up and adjudication.</p>
+            <p style={panelCopy}>Logged violations, notes, and evidence are shown here for follow-up and adjudication.</p>
           </div>
         </div>
+
+        {violationsError ? (
+          <div style={errorBox}>{violationsError}</div>
+        ) : null}
 
         <div style={tableWrap}>
           <table style={table}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc' }}>
-                {['Detected', 'Recall', 'Marketplace Listing', 'Seller Email', 'Status', 'Investigator'].map((heading) => (
+                {['Detected', 'Recall', 'Marketplace Listing', 'Evidence', 'Seller Email', 'Status', 'Investigator'].map((heading) => (
                   <th key={heading} style={th}>{heading}</th>
                 ))}
               </tr>
@@ -498,6 +561,13 @@ export default function ViolationLoggingPage() {
                       {item.listingTitle || `Listing #${item.listingID}`}
                     </a>
                   </td>
+                  <td style={td}>
+                    {item.evidenceURL ? (
+                      <a href={item.evidenceURL} target="_blank" rel="noreferrer" style={tableLink}>
+                        Open Evidence
+                      </a>
+                    ) : 'N/A'}
+                  </td>
                   <td style={td}>{item.sellerEmail || 'N/A'}</td>
                   <td style={td}>
                     <span style={statusPill}>{item.violationStatus || 'Logged'}</span>
@@ -506,7 +576,7 @@ export default function ViolationLoggingPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} style={emptyTableCell}>
+                  <td colSpan={7} style={emptyTableCell}>
                     No violations have been logged yet.
                   </td>
                 </tr>

@@ -3,19 +3,26 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import ProductListing, Recall, User, Violation
+from models import Adjudication, ProductListing, Recall, SellerResponse, ShortList, User, Violation
 from schemas import (
     DetectedListingOut,
     EbayScanRequest,
     EbayScanResponse,
     RecallSummary,
+    SellerResponseCreate,
+    SellerResponseOut,
+    SellerViolationNoticeOut,
     ViolationCreate,
     ViolationCreateResponse,
     ViolationOut,
+    ViolationShortlistSearchRequest,
+    ViolationShortlistSearchResponse,
+    ViolationUpdate,
 )
 from services import (
     EbayApiError,
@@ -41,6 +48,7 @@ def _validate_required_fields(payload: ViolationCreate) -> None:
     required_fields = {
         "violationStatus": payload.violationStatus,
         "message": payload.message,
+        "evidenceURL": payload.evidenceURL,
         "investigatorNotes": payload.investigatorNotes,
         "listing.externalListingId": payload.listing.externalListingId,
         "listing.listingTitle": payload.listing.listingTitle,
@@ -75,6 +83,131 @@ def _serialize_price(value: Optional[Decimal]) -> Optional[float]:
     return float(value)
 
 
+def _raise_schema_error(exc: Exception, db: Session) -> None:
+    db.rollback()
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Violation data could not be loaded because the database schema is behind the Sprint 2 app. "
+            "Run database/migrations/2026-04-08_marketplace_violation_mvp.sql and "
+            "database/migrations/2026-04-08_violation_evidence.sql and "
+            "database/migrations/2026-04-08_seller_response_evidence.sql or redeploy against an updated database."
+        ),
+    ) from exc
+
+
+def _has_required_value(value: object) -> bool:
+    if isinstance(value, str) or value is None:
+        return bool(_clean_text(value))
+    return value is not None
+
+
+def _violation_documentation_complete(violation: Violation) -> bool:
+    recall = violation.recall
+    listing = violation.listing
+
+    seller_identifier = None
+    if listing:
+        seller_identifier = listing.sellerUserID or listing.sellerEmail or listing.sellerName
+
+    required_values = [
+        violation.recallID,
+        recall.productName if recall else None,
+        listing.marketplaceName if listing else None,
+        seller_identifier,
+        violation.dateDetected,
+        violation.message,
+        violation.violationStatus,
+    ]
+    return all(_has_required_value(value) for value in required_values)
+
+
+def _validate_editable_status(value: str) -> str:
+    normalized = _clean_text(value)
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Violation status is required.",
+        )
+
+    lowered = normalized.lower()
+    if lowered not in {"resolved", "unresolved"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Violation status must be either "resolved" or "unresolved".',
+        )
+
+    return lowered.capitalize()
+
+
+def _find_seller_user_by_email(db: Session, seller_email: Optional[str]) -> Optional[User]:
+    normalized_email = _clean_text(seller_email)
+    if not normalized_email or not _is_valid_email(normalized_email):
+        return None
+
+    return (
+        db.query(User)
+        .filter(User.email == normalized_email.lower(), User.role == "Seller")
+        .first()
+    )
+
+
+def _upsert_listing_from_marketplace_result(
+    db: Session,
+    listing_data: dict,
+    seller_user: Optional[User] = None,
+) -> ProductListing:
+    external_listing_id = _clean_text(listing_data.get("externalListingId"))
+    listing_url = _clean_text(listing_data.get("listingURL"))
+    seller_email = _clean_text(listing_data.get("sellerEmail"))
+
+    filters = []
+    if external_listing_id:
+        filters.append(ProductListing.externalListingId == external_listing_id)
+    if listing_url:
+        filters.append(ProductListing.listingURL == listing_url)
+
+    listing = db.query(ProductListing).filter(or_(*filters)).first() if filters else None
+
+    if listing:
+        listing.listingTitle = _clean_text(listing_data.get("listingTitle")) or listing.listingTitle
+        listing.listingDate = listing_data.get("listingDate") or listing.listingDate
+        listing.listingURL = listing_url or listing.listingURL
+        listing.price = listing_data.get("price") if listing_data.get("price") is not None else listing.price
+        listing.currency = _clean_text(listing_data.get("currency")) or listing.currency
+        listing.listingDesc = _clean_text(listing_data.get("listingDesc")) or listing.listingDesc
+        listing.address = _clean_text(listing_data.get("address")) or listing.address
+        listing.marketplaceName = _clean_text(listing_data.get("marketplaceName")) or listing.marketplaceName or "eBay"
+        listing.externalListingId = external_listing_id or listing.externalListingId
+        listing.sellerName = _clean_text(listing_data.get("sellerName")) or listing.sellerName
+        listing.sellerEmail = seller_email.lower() if seller_email else listing.sellerEmail
+        listing.imageURL = _clean_text(listing_data.get("imageURL")) or listing.imageURL
+        listing.isActive = bool(listing_data.get("isActive", True))
+        if seller_user:
+            listing.sellerUserID = seller_user.userID
+        return listing
+
+    listing = ProductListing(
+        listingTitle=_clean_text(listing_data.get("listingTitle")),
+        listingDate=listing_data.get("listingDate"),
+        listingURL=listing_url,
+        price=listing_data.get("price"),
+        currency=_clean_text(listing_data.get("currency")),
+        listingDesc=_clean_text(listing_data.get("listingDesc")),
+        address=_clean_text(listing_data.get("address")),
+        marketplaceName=_clean_text(listing_data.get("marketplaceName")) or "eBay",
+        externalListingId=external_listing_id,
+        sellerName=_clean_text(listing_data.get("sellerName")),
+        sellerEmail=seller_email.lower() if seller_email else None,
+        imageURL=_clean_text(listing_data.get("imageURL")),
+        isActive=bool(listing_data.get("isActive", True)),
+        sellerUserID=seller_user.userID if seller_user else None,
+    )
+    db.add(listing)
+    db.flush()
+    return listing
+
+
 def _build_violation_out(violation: Violation) -> ViolationOut:
     investigator = violation.investigator
     recipient = violation.recipient
@@ -89,11 +222,16 @@ def _build_violation_out(violation: Violation) -> ViolationOut:
     if recipient:
         recipient_name = f"{recipient.firstName} {recipient.lastName}"
 
+    short_list_id = None
+    if recall and recall.shortlist_entry:
+        short_list_id = recall.shortlist_entry.shortListID
+
     return ViolationOut(
         violationID=violation.violationID,
         isViolation=bool(violation.isViolation),
         violationStatus=violation.violationStatus,
         message=violation.message,
+        evidenceURL=violation.evidenceURL,
         dateDetected=violation.dateDetected,
         investigatorNotes=violation.investigatorNotes,
         investigatorID=violation.investigatorID,
@@ -111,17 +249,207 @@ def _build_violation_out(violation: Violation) -> ViolationOut:
         sellerEmail=listing.sellerEmail if listing else None,
         price=_serialize_price(listing.price) if listing else None,
         currency=getattr(listing, "currency", None) if listing else None,
+        shortListID=short_list_id,
+        productName=recall.productName if recall else None,
+        matchConfirmation=bool(violation.isViolation),
+        URL=listing.listingURL if listing else None,
+        seller=(listing.sellerName or listing.sellerEmail) if listing else None,
+        sellerID=(listing.sellerUserID if listing else None) or violation.receivedByID,
+        violationDate=violation.dateDetected,
+        violationDescription=violation.message,
+        status=violation.violationStatus,
+        marketplaceSource=listing.marketplaceName if listing else None,
+        documentationComplete=_violation_documentation_complete(violation),
+    )
+
+
+def _get_seller_user(db: Session, seller_user_id: int) -> User:
+    seller = db.query(User).filter(User.userID == seller_user_id).first()
+    if not seller or seller.role != "Seller":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seller access requires a valid Seller account.",
+        )
+    return seller
+
+
+def _get_notice_for_seller(db: Session, seller_user_id: int, violation_id: int) -> Violation:
+    violation = (
+        db.query(Violation)
+        .join(ProductListing, Violation.listingID == ProductListing.listingID)
+        .filter(
+            Violation.violationID == violation_id,
+            or_(
+                Violation.receivedByID == seller_user_id,
+                ProductListing.sellerUserID == seller_user_id,
+            ),
+        )
+        .first()
+    )
+    if not violation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Violation notice not found for this seller.",
+        )
+    return violation
+
+
+def _build_seller_notice_out(violation: Violation, seller_user_id: int) -> SellerViolationNoticeOut:
+    recall = violation.recall
+    listing = violation.listing
+    investigator = violation.investigator
+    existing_response = next(
+        (response for response in violation.seller_responses if response.sellerUserID == seller_user_id),
+        None,
+    )
+
+    investigator_name = None
+    if investigator:
+        investigator_name = f"{investigator.firstName} {investigator.lastName}"
+
+    return SellerViolationNoticeOut(
+        violationID=violation.violationID,
+        violationStatus=violation.violationStatus,
+        message=violation.message,
+        evidenceURL=violation.evidenceURL,
+        dateDetected=violation.dateDetected,
+        recallID=violation.recallID,
+        recallProductName=recall.productName if recall else None,
+        hazard=recall.hazard if recall else None,
+        listingID=violation.listingID,
+        listingTitle=listing.listingTitle if listing else None,
+        listingURL=listing.listingURL if listing else None,
+        marketplaceName=listing.marketplaceName if listing else None,
+        sellerEmail=listing.sellerEmail if listing else None,
+        investigatorName=investigator_name,
+        responseID=existing_response.responseID if existing_response else None,
+        sellerResponse=existing_response.response if existing_response else None,
+        responseEvidenceURL=existing_response.evidenceURL if existing_response else None,
+        dateResponded=existing_response.dateResponded if existing_response else None,
     )
 
 
 @router.get("", response_model=list[ViolationOut])
 def list_violations(db: Session = Depends(get_db)):
-    violations = (
-        db.query(Violation)
-        .order_by(Violation.dateDetected.desc(), Violation.violationID.desc())
+    try:
+        violations = (
+            db.query(Violation)
+            .options(
+                joinedload(Violation.investigator),
+                joinedload(Violation.recipient),
+                joinedload(Violation.listing),
+                joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+            )
+            .order_by(Violation.dateDetected.desc(), Violation.violationID.desc())
+            .all()
+        )
+        return [_build_violation_out(violation) for violation in violations]
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.post("/search-shortlist", response_model=ViolationShortlistSearchResponse)
+def search_shortlist_for_violations(
+    payload: ViolationShortlistSearchRequest,
+    db: Session = Depends(get_db),
+):
+    investigator = db.query(User).filter(User.userID == payload.investigatorID).first()
+    if not investigator or investigator.role not in {"Investigator", "Manager"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shortlist searches require a valid investigator or manager account.",
+        )
+
+    shortlist_entries = (
+        db.query(ShortList)
+        .options(joinedload(ShortList.recall))
+        .order_by(ShortList.shortListDate.desc(), ShortList.shortListID.desc())
         .all()
     )
-    return [_build_violation_out(violation) for violation in violations]
+
+    scanned_keywords: list[str] = []
+    new_violations_found = 0
+    duplicate_matches_skipped = 0
+
+    try:
+        for entry in shortlist_entries:
+            recall = entry.recall
+            if not recall:
+                continue
+
+            query = _clean_text(recall.productName)
+            if not query:
+                continue
+
+            scanned_keywords.append(query)
+            listings = ebay_client.search_items(query=query, limit=payload.limitPerRecall)
+
+            for listing_data in listings:
+                match_result = score_listing_match(recall, listing_data, threshold=payload.minScore)
+                if not match_result["isDetectedMatch"]:
+                    continue
+
+                seller_user = _find_seller_user_by_email(db, listing_data.get("sellerEmail"))
+                listing = _upsert_listing_from_marketplace_result(db, listing_data, seller_user=seller_user)
+
+                duplicate_violation = (
+                    db.query(Violation)
+                    .filter(
+                        Violation.recallID == recall.recallID,
+                        Violation.listingID == listing.listingID,
+                    )
+                    .first()
+                )
+                if duplicate_violation:
+                    duplicate_matches_skipped += 1
+                    continue
+
+                violation = Violation(
+                    isViolation=True,
+                    violationStatus="Unresolved",
+                    message="",
+                    evidenceURL=None,
+                    dateDetected=date.today(),
+                    investigatorNotes=(
+                        "Automated eBay Browse API shortlist search detected this potential match. "
+                        "Review the listing and update the violation description after confirmation."
+                    ),
+                    investigatorID=investigator.userID,
+                    receivedByID=seller_user.userID if seller_user else None,
+                    recallID=recall.recallID,
+                    listingID=listing.listingID,
+                )
+                db.add(violation)
+                db.flush()
+                new_violations_found += 1
+
+        db.commit()
+        return ViolationShortlistSearchResponse(
+            newViolationsFound=new_violations_found,
+            searchedRecalls=len(scanned_keywords),
+            duplicateMatchesSkipped=duplicate_matches_skipped,
+            scannedKeywords=scanned_keywords,
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+    except EbayConfigError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except EbayApiError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/scan-ebay", response_model=EbayScanResponse)
@@ -192,135 +520,293 @@ def scan_ebay_listings(payload: EbayScanRequest, db: Session = Depends(get_db)):
 
 @router.post("", response_model=ViolationCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_violation(payload: ViolationCreate, db: Session = Depends(get_db)):
-    _validate_required_fields(payload)
+    try:
+        _validate_required_fields(payload)
 
-    recall = db.query(Recall).filter(Recall.recallID == payload.recallID).first()
-    if not recall:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recall ID not found.",
-        )
+        recall = db.query(Recall).filter(Recall.recallID == payload.recallID).first()
+        if not recall:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Recall ID not found.",
+            )
 
-    investigator = db.query(User).filter(User.userID == payload.investigatorID).first()
-    if not investigator or investigator.role not in {"Investigator", "Manager"}:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Investigator ID is invalid or the user does not have investigation access.",
-        )
-
-    seller_email = _clean_text(payload.listing.sellerEmail)
-    if not seller_email or not _is_valid_email(seller_email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A valid seller email is required before a violation can be logged and notified.",
-        )
-
-    seller_user = None
-    if payload.receivedByID is not None:
-        seller_user = db.query(User).filter(User.userID == payload.receivedByID).first()
-        if not seller_user or seller_user.role != "Seller":
+        investigator = db.query(User).filter(User.userID == payload.investigatorID).first()
+        if not investigator or investigator.role not in {"Investigator", "Manager"}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="receivedByID must reference a Seller in the system.",
+                detail="Investigator ID is invalid or the user does not have investigation access.",
             )
-    else:
-        seller_user = (
-            db.query(User)
-            .filter(User.email == seller_email.lower(), User.role == "Seller")
+
+        seller_email = _clean_text(payload.listing.sellerEmail)
+        if not seller_email or not _is_valid_email(seller_email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A valid seller email is required before a violation can be logged and notified.",
+            )
+
+        seller_user = None
+        if payload.receivedByID is not None:
+            seller_user = db.query(User).filter(User.userID == payload.receivedByID).first()
+            if not seller_user or seller_user.role != "Seller":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="receivedByID must reference a Seller in the system.",
+                )
+        else:
+            seller_user = _find_seller_user_by_email(db, seller_email)
+
+        existing_listing = (
+            db.query(ProductListing)
+            .filter(
+                or_(
+                    ProductListing.externalListingId == payload.listing.externalListingId,
+                    ProductListing.listingURL == payload.listing.listingURL,
+                )
+            )
             .first()
         )
 
-    existing_listing = (
-        db.query(ProductListing)
-        .filter(
-            or_(
-                ProductListing.externalListingId == payload.listing.externalListingId,
-                ProductListing.listingURL == payload.listing.listingURL,
+        if existing_listing:
+            listing = existing_listing
+            listing.listingTitle = _clean_text(payload.listing.listingTitle)
+            listing.listingDate = payload.listing.listingDate
+            listing.listingURL = _clean_text(payload.listing.listingURL)
+            listing.price = payload.listing.price
+            listing.currency = _clean_text(payload.listing.currency)
+            listing.listingDesc = _clean_text(payload.listing.listingDesc)
+            listing.address = _clean_text(payload.listing.address)
+            listing.marketplaceName = _clean_text(payload.listing.marketplaceName) or "eBay"
+            listing.externalListingId = _clean_text(payload.listing.externalListingId)
+            listing.sellerName = _clean_text(payload.listing.sellerName)
+            listing.sellerEmail = seller_email.lower()
+            listing.imageURL = _clean_text(payload.listing.imageURL)
+            listing.isActive = payload.listing.isActive
+            listing.sellerUserID = seller_user.userID if seller_user else None
+        else:
+            listing = ProductListing(
+                listingTitle=_clean_text(payload.listing.listingTitle),
+                listingDate=payload.listing.listingDate,
+                listingURL=_clean_text(payload.listing.listingURL),
+                price=payload.listing.price,
+                currency=_clean_text(payload.listing.currency),
+                listingDesc=_clean_text(payload.listing.listingDesc),
+                address=_clean_text(payload.listing.address),
+                marketplaceName=_clean_text(payload.listing.marketplaceName) or "eBay",
+                externalListingId=_clean_text(payload.listing.externalListingId),
+                sellerName=_clean_text(payload.listing.sellerName),
+                sellerEmail=seller_email.lower(),
+                imageURL=_clean_text(payload.listing.imageURL),
+                isActive=payload.listing.isActive,
+                sellerUserID=seller_user.userID if seller_user else None,
             )
-        )
-        .first()
-    )
+            db.add(listing)
+            db.flush()
 
-    if existing_listing:
-        listing = existing_listing
-        listing.listingTitle = _clean_text(payload.listing.listingTitle)
-        listing.listingDate = payload.listing.listingDate
-        listing.listingURL = _clean_text(payload.listing.listingURL)
-        listing.price = payload.listing.price
-        listing.currency = _clean_text(payload.listing.currency)
-        listing.listingDesc = _clean_text(payload.listing.listingDesc)
-        listing.address = _clean_text(payload.listing.address)
-        listing.marketplaceName = _clean_text(payload.listing.marketplaceName) or "eBay"
-        listing.externalListingId = _clean_text(payload.listing.externalListingId)
-        listing.sellerName = _clean_text(payload.listing.sellerName)
-        listing.sellerEmail = seller_email.lower()
-        listing.imageURL = _clean_text(payload.listing.imageURL)
-        listing.isActive = payload.listing.isActive
-        listing.sellerUserID = seller_user.userID if seller_user else None
-    else:
-        listing = ProductListing(
-            listingTitle=_clean_text(payload.listing.listingTitle),
-            listingDate=payload.listing.listingDate,
-            listingURL=_clean_text(payload.listing.listingURL),
-            price=payload.listing.price,
-            currency=_clean_text(payload.listing.currency),
-            listingDesc=_clean_text(payload.listing.listingDesc),
-            address=_clean_text(payload.listing.address),
-            marketplaceName=_clean_text(payload.listing.marketplaceName) or "eBay",
-            externalListingId=_clean_text(payload.listing.externalListingId),
-            sellerName=_clean_text(payload.listing.sellerName),
-            sellerEmail=seller_email.lower(),
-            imageURL=_clean_text(payload.listing.imageURL),
-            isActive=payload.listing.isActive,
-            sellerUserID=seller_user.userID if seller_user else None,
+        duplicate_violation = (
+            db.query(Violation)
+            .filter(
+                Violation.recallID == recall.recallID,
+                Violation.listingID == listing.listingID,
+                Violation.isViolation.is_(True),
+            )
+            .first()
         )
-        db.add(listing)
+        if duplicate_violation:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A violation has already been logged for this recalled product and marketplace listing.",
+            )
+
+        violation = Violation(
+            isViolation=True,
+            violationStatus=_clean_text(payload.violationStatus),
+            message=_clean_text(payload.message),
+            evidenceURL=_clean_text(payload.evidenceURL),
+            dateDetected=date.today(),
+            investigatorNotes=_clean_text(payload.investigatorNotes),
+            investigatorID=investigator.userID,
+            receivedByID=seller_user.userID if seller_user else None,
+            recallID=recall.recallID,
+            listingID=listing.listingID,
+        )
+
+        db.add(violation)
+        db.commit()
+        db.refresh(violation)
+
+        notification = send_violation_notification(
+            recipient_email=seller_email.lower(),
+            recipient_name=_clean_text(payload.listing.sellerName) or "Seller",
+            violation_id=violation.violationID,
+            recall_name=recall.productName,
+            listing_title=listing.listingTitle or "Marketplace listing",
+            listing_url=listing.listingURL or "",
+            violation_status=violation.violationStatus or "Logged",
+            message=violation.message or "",
+            evidence_url=violation.evidenceURL or "",
+            investigator_notes=violation.investigatorNotes or "",
+        )
+
+        return ViolationCreateResponse(
+            **_build_violation_out(violation).model_dump(),
+            notificationStatus=notification.status,
+            notificationDetail=notification.detail,
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.put("/{violation_id}", response_model=ViolationOut)
+def update_violation(
+    violation_id: int,
+    payload: ViolationUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        violation = (
+            db.query(Violation)
+            .options(
+                joinedload(Violation.investigator),
+                joinedload(Violation.recipient),
+                joinedload(Violation.listing),
+                joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+            )
+            .filter(Violation.violationID == violation_id)
+            .first()
+        )
+        if not violation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Violation not found.",
+            )
+
+        violation.isViolation = payload.matchConfirmation
+        violation.message = _clean_text(payload.violationDescription) or ""
+        violation.violationStatus = _validate_editable_status(payload.status)
+        if violation.dateDetected is None:
+            violation.dateDetected = date.today()
+
+        db.commit()
+        db.refresh(violation)
+        return _build_violation_out(violation)
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.delete("/{violation_id}")
+def delete_violation(violation_id: int, db: Session = Depends(get_db)):
+    try:
+        violation = db.query(Violation).filter(Violation.violationID == violation_id).first()
+        if not violation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Violation not found.",
+            )
+
+        if (_clean_text(violation.violationStatus) or "").lower() != "resolved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only resolved violations can be deleted.",
+            )
+
+        listing_id = violation.listingID
+
+        db.query(SellerResponse).filter(SellerResponse.violationID == violation.violationID).delete()
+        db.query(Adjudication).filter(Adjudication.violationID == violation.violationID).delete()
+        db.delete(violation)
         db.flush()
 
-    duplicate_violation = (
-        db.query(Violation)
-        .filter(
-            Violation.recallID == recall.recallID,
-            Violation.listingID == listing.listingID,
-            Violation.isViolation.is_(True),
+        if listing_id is not None:
+            remaining_violation = (
+                db.query(Violation)
+                .filter(Violation.listingID == listing_id)
+                .first()
+            )
+            if not remaining_violation:
+                listing = db.query(ProductListing).filter(ProductListing.listingID == listing_id).first()
+                if listing:
+                    db.delete(listing)
+
+        db.commit()
+        return {"message": f"Violation {violation_id} deleted successfully."}
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.get("/notices/{seller_user_id}", response_model=list[SellerViolationNoticeOut])
+def list_seller_notices(seller_user_id: int, db: Session = Depends(get_db)):
+    try:
+        _get_seller_user(db, seller_user_id)
+        violations = (
+            db.query(Violation)
+            .join(ProductListing, Violation.listingID == ProductListing.listingID)
+            .filter(
+                or_(
+                    Violation.receivedByID == seller_user_id,
+                    ProductListing.sellerUserID == seller_user_id,
+                )
+            )
+            .order_by(Violation.dateDetected.desc(), Violation.violationID.desc())
+            .all()
         )
-        .first()
-    )
-    if duplicate_violation:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A violation has already been logged for this recalled product and marketplace listing.",
+        return [_build_seller_notice_out(violation, seller_user_id) for violation in violations]
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.get("/notices/{seller_user_id}/{violation_id}", response_model=SellerViolationNoticeOut)
+def get_seller_notice(seller_user_id: int, violation_id: int, db: Session = Depends(get_db)):
+    try:
+        _get_seller_user(db, seller_user_id)
+        violation = _get_notice_for_seller(db, seller_user_id, violation_id)
+        return _build_seller_notice_out(violation, seller_user_id)
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.post("/{violation_id}/responses", response_model=SellerResponseOut, status_code=status.HTTP_201_CREATED)
+def submit_seller_response(
+    violation_id: int,
+    payload: SellerResponseCreate,
+    db: Session = Depends(get_db),
+):
+    try:
+        _get_seller_user(db, payload.sellerUserID)
+        violation = _get_notice_for_seller(db, payload.sellerUserID, violation_id)
+
+        if not _clean_text(payload.response) or not _clean_text(payload.evidenceURL):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Response details and evidence are required before submitting a seller response.",
+            )
+
+        existing_response = (
+            db.query(SellerResponse)
+            .filter(
+                SellerResponse.violationID == violation.violationID,
+                SellerResponse.sellerUserID == payload.sellerUserID,
+            )
+            .first()
         )
 
-    violation = Violation(
-        isViolation=True,
-        violationStatus=_clean_text(payload.violationStatus),
-        message=_clean_text(payload.message),
-        dateDetected=date.today(),
-        investigatorNotes=_clean_text(payload.investigatorNotes),
-        investigatorID=investigator.userID,
-        receivedByID=seller_user.userID if seller_user else None,
-        recallID=recall.recallID,
-        listingID=listing.listingID,
-    )
+        if existing_response:
+            existing_response.response = _clean_text(payload.response)
+            existing_response.evidenceURL = _clean_text(payload.evidenceURL)
+            existing_response.dateResponded = date.today()
+            seller_response = existing_response
+        else:
+            seller_response = SellerResponse(
+                response=_clean_text(payload.response),
+                evidenceURL=_clean_text(payload.evidenceURL),
+                dateResponded=date.today(),
+                violationID=violation.violationID,
+                sellerUserID=payload.sellerUserID,
+            )
+            db.add(seller_response)
 
-    db.add(violation)
-    db.commit()
-    db.refresh(violation)
-
-    notification = send_violation_notification(
-        recipient_email=seller_email.lower(),
-        recipient_name=_clean_text(payload.listing.sellerName) or "Seller",
-        recall_name=recall.productName,
-        listing_title=listing.listingTitle or "Marketplace listing",
-        listing_url=listing.listingURL or "",
-        violation_status=violation.violationStatus or "Logged",
-        message=violation.message or "",
-        investigator_notes=violation.investigatorNotes or "",
-    )
-
-    return ViolationCreateResponse(
-        **_build_violation_out(violation).model_dump(),
-        notificationStatus=notification.status,
-        notificationDetail=notification.detail,
-    )
+        violation.violationStatus = "Seller Responded"
+        db.commit()
+        db.refresh(seller_response)
+        return SellerResponseOut.model_validate(seller_response)
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)

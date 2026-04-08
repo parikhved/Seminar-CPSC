@@ -81,37 +81,176 @@ export default function AnalyticsPage() {
   const [shortlistTrend, setShortlistTrend]  = useState([])
   const [recallsByDate, setRecallsByDate]    = useState([])
   const [categoryWeek, setCategoryWeek]      = useState([])
+  const [violationOverview, setViolationOverview] = useState({
+    newViolationsByDay: [],
+    newViolationsTotal: 0,
+    documentationCompletion: { complete: 0, incomplete: 0, percentageComplete: 0 },
+    resolutionRate: { resolved: 0, unresolved: 0, percentageResolved: 0 },
+  })
   const [loading, setLoading]                = useState(true)
+  const [error, setError]                    = useState('')
 
   useEffect(() => {
-    Promise.all([
-      api.get('/api/shortlist/analytics/okr'),
-      api.get('/api/analytics/incomplete-recalls'),
-      api.get('/api/analytics/shortlist-trend'),
-      api.get('/api/analytics/recalls-by-date'),
-      api.get('/api/analytics/category-week'),
-    ]).then(([okrRes, incRes, trendRes, dateRes, catRes]) => {
-      setOkr(okrRes.data)
-      setIncomplete(incRes.data)
-      setShortlistTrend(trendRes.data)
-      setRecallsByDate(dateRes.data)
-      setCategoryWeek(catRes.data)
-    }).finally(() => setLoading(false))
+    async function load() {
+      setLoading(true)
+      try {
+        const [
+          okrRes,
+          incRes,
+          trendRes,
+          dateRes,
+          catRes,
+          violationRes,
+        ] = await Promise.all([
+          api.get('/api/shortlist/analytics/okr'),
+          api.get('/api/analytics/incomplete-recalls'),
+          api.get('/api/analytics/shortlist-trend'),
+          api.get('/api/analytics/recalls-by-date'),
+          api.get('/api/analytics/category-week'),
+          api.get('/api/analytics/violations-overview'),
+        ])
+
+        setOkr(okrRes.data)
+        setIncomplete(incRes.data)
+        setShortlistTrend(trendRes.data)
+        setRecallsByDate(dateRes.data)
+        setCategoryWeek(catRes.data)
+        setViolationOverview(violationRes.data)
+        setError('')
+      } catch {
+        setError('Unable to load analytics right now. Please refresh in a moment.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
   }, [])
 
   if (loading) return <LoadingSpinner />
+  if (error || !okr) {
+    return (
+      <div style={{ padding: 32 }}>
+        <p style={{ color: '#b91c1c', fontSize: 15 }}>{error || 'Unable to load analytics right now.'}</p>
+      </div>
+    )
+  }
 
   const pieData = Object.entries(okr.shortlist_by_priority)
     .filter(([, cnt]) => cnt > 0)
     .map(([name, value]) => ({ name, value }))
 
   const { data: catWeekData, categories } = pivotCategoryWeek(categoryWeek)
+  const documentationPieData = [
+    { name: 'Complete', value: violationOverview.documentationCompletion.complete, color: '#16A34A' },
+    { name: 'Incomplete', value: violationOverview.documentationCompletion.incomplete, color: '#DC2626' },
+  ]
+  const resolutionPieData = [
+    { name: 'Resolved', value: violationOverview.resolutionRate.resolved, color: '#16A34A' },
+    { name: 'Unresolved', value: violationOverview.resolutionRate.unresolved, color: '#EA580C' },
+  ]
 
   return (
     <div style={{ padding: 32, maxWidth: 1200 }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#0A1628' }}>Analytics</h1>
         <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 14 }}>OKR performance tracking — live database</p>
+      </div>
+
+      <SectionHeading>Violation Analytics</SectionHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <div>
+              <h3 style={cardTitle}>New Violations</h3>
+              <p style={cardDesc}>Number of new violations found during the last 7 days.</p>
+            </div>
+            <div style={metricBadge}>
+              {violationOverview.newViolationsTotal} this week
+            </div>
+          </div>
+          {violationOverview.newViolationsByDay.length === 0 ? (
+            <p style={emptyMsg}>No weekly violation data available yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={violationOverview.newViolationsByDay}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+                <Bar dataKey="count" fill="#2563EB" radius={[8, 8, 0, 0]} name="New Violations" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div style={card}>
+          <h3 style={{ ...cardTitle, marginBottom: 8 }}>Violation Documentation Completion</h3>
+          <p style={cardDesc}>Percentage of violations with all required documentation fields completed.</p>
+          {documentationPieData.every((item) => item.value === 0) ? (
+            <p style={emptyMsg}>No violation data available yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={230}>
+              <PieChart>
+                <Pie
+                  data={documentationPieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={88}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {documentationPieData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+          <div style={metricSummary}>
+            <strong>{violationOverview.documentationCompletion.percentageComplete}% complete</strong>
+            <span>{violationOverview.documentationCompletion.complete} complete</span>
+            <span>{violationOverview.documentationCompletion.incomplete} incomplete</span>
+          </div>
+        </div>
+
+        <div style={card}>
+          <h3 style={{ ...cardTitle, marginBottom: 8 }}>Violation Resolution Rate</h3>
+          <p style={cardDesc}>Percentage of current violations that have been resolved versus unresolved.</p>
+          {resolutionPieData.every((item) => item.value === 0) ? (
+            <p style={emptyMsg}>No violation data available yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={230}>
+              <PieChart>
+                <Pie
+                  data={resolutionPieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={88}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {resolutionPieData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+          <div style={metricSummary}>
+            <strong>{violationOverview.resolutionRate.percentageResolved}% resolved</strong>
+            <span>{violationOverview.resolutionRate.resolved} resolved</span>
+            <span>{violationOverview.resolutionRate.unresolved} unresolved</span>
+          </div>
+        </div>
       </div>
 
       {/* ── OKR 1.1 ── */}
@@ -360,4 +499,24 @@ const tdStyle = {
   fontSize: 13,
   color: '#475569',
   verticalAlign: 'middle',
+}
+
+const metricBadge = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '6px 10px',
+  borderRadius: 999,
+  backgroundColor: '#dbeafe',
+  color: '#1d4ed8',
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const metricSummary = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  marginTop: 12,
+  color: '#475569',
+  fontSize: 13,
 }

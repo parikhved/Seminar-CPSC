@@ -3,16 +3,28 @@ import { NavLink } from 'react-router-dom'
 import { BarChart3, FileSearch, LayoutDashboard, ShieldAlert, Siren } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
-const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
-  { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
-  { label: 'Violation Logging', icon: Siren, path: '/violations' },
-  { label: 'Analytics', icon: BarChart3, path: '/analytics' },
-]
-
 export default function Sidebar() {
   const { user } = useAuth()
+  const navItems = user?.role === 'Investigator'
+    ? [
+        { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+        { label: 'Assigned Recalls', icon: ShieldAlert, path: '/shortlist' },
+        { label: 'Violation List', icon: Siren, path: '/violations' },
+        { label: 'All Recalls', icon: FileSearch, path: '/recalls' },
+        { label: 'Analytics', icon: BarChart3, path: '/analytics' },
+      ]
+    : user?.role === 'Seller'
+      ? [
+          { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+          { label: 'Violation Notices', icon: Siren, path: '/seller/notices' },
+        ]
+    : [
+        { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+        { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
+        { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
+        { label: 'Violation List', icon: Siren, path: '/violations' },
+        { label: 'Analytics', icon: BarChart3, path: '/analytics' },
+      ]
 
   return (
     <aside style={aside}>

@@ -1,18 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import ShortListTable from '../components/ShortListTable'
 import EditShortListModal from '../components/EditShortListModal'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PriorityBadge from '../components/PriorityBadge'
 import { showToast } from '../components/NotificationToast'
+import { useAuth } from '../context/AuthContext'
 
 const PRIORITIES = ['All', 'Critical', 'High', 'Medium', 'Low']
 
 export default function ShortListPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [editItem, setEditItem] = useState(null)
+  const isInvestigator = user?.role === 'Investigator'
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -47,14 +52,20 @@ export default function ShortListPage() {
     <div style={{ padding: 32, maxWidth: 1300 }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#0A1628' }}>High Priority Recall List</h1>
-        <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 14 }}>Recalls prioritized for investigation</p>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#0A1628' }}>
+          {isInvestigator ? 'Assigned Recalls' : 'High Priority Recall List'}
+        </h1>
+        <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 14 }}>
+          {isInvestigator ? 'Priority recalls queued for investigator review' : 'Recalls prioritized for investigation'}
+        </p>
       </div>
 
       {/* Filter bar + summary */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Filter by Priority:</label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+            {isInvestigator ? 'Filter by Severity:' : 'Filter by Priority:'}
+          </label>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -75,7 +86,7 @@ export default function ShortListPage() {
         </div>
 
         <span style={{ fontSize: 13, color: '#64748B' }}>
-          <strong>{items.length}</strong> recall{items.length !== 1 ? 's' : ''} on priority list
+          <strong>{items.length}</strong> recall{items.length !== 1 ? 's' : ''} {isInvestigator ? 'in your queue' : 'on priority list'}
         </span>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -98,11 +109,48 @@ export default function ShortListPage() {
           items={items}
           onEdit={setEditItem}
           onDelete={handleDelete}
+          readOnly={isInvestigator}
+          actionRenderer={isInvestigator ? (item) => (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => navigate(`/recalls/${item.recallID}`)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid #dbe4f0',
+                  backgroundColor: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                View Recall
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/violations/logging?recallId=${item.recallID}`)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Compare Listings
+              </button>
+            </div>
+          ) : null}
         />
       )}
 
       {/* Edit modal */}
-      {editItem && (
+      {!isInvestigator && editItem && (
         <EditShortListModal
           item={editItem}
           onClose={() => setEditItem(null)}

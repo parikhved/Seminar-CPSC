@@ -26,6 +26,11 @@ class User(Base):
         back_populates="recipient",
         foreign_keys="Violation.receivedByID",
     )
+    seller_responses = relationship(
+        "SellerResponse",
+        back_populates="seller",
+        foreign_keys="SellerResponse.sellerUserID",
+    )
 
 
 class Recall(Base):
@@ -105,6 +110,7 @@ class Violation(Base):
     isViolation       = Column("isViolation",       Boolean)
     violationStatus   = Column("violationStatus",   String(200))
     message           = Column("message",           Text)
+    evidenceURL       = Column("evidenceURL",       String(500))
     dateDetected      = Column("dateDetected",      Date)
     investigatorNotes = Column("investigatorNotes", Text)
     investigatorID    = Column("investigatorID",    Integer,  ForeignKey("user.userID"))
@@ -116,6 +122,7 @@ class Violation(Base):
     recipient = relationship("User", back_populates="received_violations", foreign_keys=[receivedByID])
     recall = relationship("Recall", back_populates="violations")
     listing = relationship("ProductListing", back_populates="violations")
+    seller_responses = relationship("SellerResponse", back_populates="violation")
 
 
 class SellerResponse(Base):
@@ -123,10 +130,13 @@ class SellerResponse(Base):
 
     responseID    = Column("responseID",    Integer,      primary_key=True, index=True)
     response      = Column("response",      String(400))
-    evidenceURL   = Column("evidenceURL",   String(100))
+    evidenceURL   = Column("evidenceURL",   String(500))
     dateResponded = Column("dateResponded", Date)
     violationID   = Column("violationID",   Integer,      ForeignKey("violation.violationID"))
     sellerUserID  = Column("sellerUserID",  Integer,      ForeignKey("user.userID"))
+
+    violation = relationship("Violation", back_populates="seller_responses")
+    seller = relationship("User", back_populates="seller_responses", foreign_keys=[sellerUserID])
 
 
 class Adjudication(Base):

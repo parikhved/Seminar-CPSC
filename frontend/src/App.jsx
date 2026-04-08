@@ -13,7 +13,10 @@ import ShortListPage from './pages/ShortListPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import RecallReviewPage from './pages/RecallReviewPage'
 import PrioritizationPage from './pages/PrioritizationPage'
+import ViolationListPage from './pages/ViolationListPage'
 import ViolationLoggingPage from './pages/ViolationLoggingPage'
+import SellerNoticesPage from './pages/SellerNoticesPage'
+import SellerViolationNoticePage from './pages/SellerViolationNoticePage'
 
 function AuthenticatedLayout({ children }) {
   return (
@@ -102,7 +105,37 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AuthenticatedLayout>
+                  <ViolationListPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/violations/logging"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
                   <ViolationLoggingPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seller/notices"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <SellerNoticesPage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seller/notices/:violationId"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <SellerViolationNoticePage />
                 </AuthenticatedLayout>
               </ProtectedRoute>
             }

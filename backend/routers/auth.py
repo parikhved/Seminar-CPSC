@@ -41,10 +41,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Email or Password is incorrect.",
         )
 
-    if user.role not in {"Manager", "Investigator"}:
+    if user.role not in {"Manager", "Investigator", "Seller"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted to CPSC Managers and Investigators.",
+            detail="Access restricted to CPSC Managers, Investigators, and Sellers.",
         )
 
     token = f"sprint2-token-{user.userID}-{user.email}"

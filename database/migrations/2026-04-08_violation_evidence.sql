@@ -1,0 +1,2 @@
+ALTER TABLE violation
+    ADD COLUMN IF NOT EXISTS "evidenceURL" VARCHAR(500);

@@ -2,7 +2,7 @@
 
 **Team 2 | BIT 4454 — Virginia Tech | Spring 2026**
 
-Recall Prioritization System for the Consumer Product Safety Commission (CPSC). The current MVP supports recall review, marketplace comparison against eBay listings, violation logging, reporting, and seller notification workflows.
+Recall Prioritization System for the Consumer Product Safety Commission (CPSC). The current MVP supports recall review, shortlist-based eBay marketplace scanning, violation list management, violation logging, reporting, and seller notification workflows.
 
 ---
 
@@ -43,7 +43,7 @@ Recall Prioritization System for the Consumer Product Safety Commission (CPSC). 
 2. Navigate to **SQL Editor**.
 3. Run `database/schema.sql` (creates all 9 tables).
 4. Run `database/seed.sql` (inserts seed data).
-5. If you already have an existing database from the earlier MVP, run `database/migrations/2026-04-08_marketplace_violation_mvp.sql` instead of resetting everything.
+5. If you already have an existing database from the earlier MVP, run `database/migrations/2026-04-08_marketplace_violation_mvp.sql`, `database/migrations/2026-04-08_violation_evidence.sql`, and `database/migrations/2026-04-08_seller_response_evidence.sql` instead of resetting everything.
 6. Copy your connection string from **Settings → Database → Connection string (URI)**.
 
 ### 2. Backend (FastAPI)
@@ -81,6 +81,8 @@ Frontend will be available at http://localhost:5173
 - Email: `emily.carter@cpsc-sim.gov`
 - Password: `demo123`
 - Investigator Email: `daniel.kim@cpsc-investigator.gov`
+- Password: `demo123`
+- Seller Email: `priya.shah@gmail.com`
 - Password: `demo123`
 
 ---
@@ -126,8 +128,12 @@ VITE_API_URL=http://localhost:8000
 | DELETE | `/api/shortlist/{id}` | Remove from shortlist |
 | GET | `/api/shortlist/analytics/okr` | OKR metrics |
 | GET | `/api/violations` | List logged violations |
+| POST | `/api/violations/search-shortlist` | Search all shortlisted products against eBay and insert new violations |
 | POST | `/api/violations/scan-ebay` | Search eBay listings for a recall |
 | POST | `/api/violations` | Log a violation and send seller notification |
+| PUT | `/api/violations/{id}` | Edit match confirmation, description, and status |
+| DELETE | `/api/violations/{id}` | Delete a resolved violation |
+| GET | `/api/analytics/violations-overview` | New-violations, documentation, and resolution analytics |
 | GET | `/health` | Health check |
 
 ---
@@ -171,6 +177,20 @@ Update `backend/main.py` CORS `allow_origins` list to include your actual Vercel
 
 **Current MVP User Story:** As a CPSC Investigator, I need to identify recalled products in online marketplaces and log violations so unsafe products can be removed.
 
+**Investigator Workflow:**
+1. Log In
+2. Investigator Dashboard
+3. View Assigned Recall
+4. Compare Recall vs Marketplace Listings
+5. Search the Violation List for current marketplace matches
+6. Edit violation status and documentation
+7. Use the logging workspace when seller notification is required
+
+**Seller Workflow:**
+1. Log In
+2. View Violation Notice
+3. Submit Response + Evidence
+
 **OKR 1.1 — Increase High Priority Recall Shortlisting**
 - Baseline: 122 shortlisted recalls/quarter
 - Target: 134 (10% increase)
@@ -181,12 +201,16 @@ Update `backend/main.py` CORS `allow_origins` list to include your actual Vercel
 
 **Deliverables:**
 1. eBay listing comparison against recalled products
-2. Violation logging page connected to the database
-3. Validation for required violation fields before insertion
-4. Seller email notification after logging
-5. Reporting view of logged violations
+2. Investigator dashboard and assigned recall workflow
+3. Violation List page connected to the database
+4. Validation for required violation fields before insertion
+5. Seller email notification after logging
+6. Reporting view of logged violations
+7. Seller notice and response workflow
 
 **Implementation Note:** eBay Browse API powers marketplace search and listing retrieval. Seller email is not returned by that API, so the investigator supplies or maps the seller email inside the violation logging flow before notification is sent.
+
+**Testing Note:** eBay Sandbox sample data and the current 3-5 violation detection test cases are documented in [docs/violation-detection-test-cases.md](docs/violation-detection-test-cases.md).
 
 ---
 

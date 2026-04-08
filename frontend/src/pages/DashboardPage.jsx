@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { Bell, CheckCircle2, Clock3, FileUp, ShieldAlert } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
+import InvestigatorDashboardPage from './InvestigatorDashboardPage'
+import SellerDashboardPage from './SellerDashboardPage'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { showToast } from '../components/NotificationToast'
 
@@ -11,6 +14,18 @@ function formatDate(d) {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  if (user?.role === 'Investigator') {
+    return <InvestigatorDashboardPage />
+  }
+  if (user?.role === 'Seller') {
+    return <SellerDashboardPage />
+  }
+
+  return <ManagerDashboardPage />
+}
+
+function ManagerDashboardPage() {
   const navigate = useNavigate()
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)

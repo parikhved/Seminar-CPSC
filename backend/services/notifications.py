@@ -14,11 +14,13 @@ class NotificationResult:
 def send_violation_notification(
     recipient_email: str,
     recipient_name: str,
+    violation_id: int,
     recall_name: str,
     listing_title: str,
     listing_url: str,
     violation_status: str,
     message: str,
+    evidence_url: str,
     investigator_notes: str,
 ) -> NotificationResult:
     smtp_host = os.getenv("SMTP_HOST", "").strip()
@@ -29,6 +31,9 @@ def send_violation_notification(
             status="skipped",
             detail="Violation logged, but SMTP is not configured. Set SMTP_HOST and SMTP_FROM to send emails.",
         )
+
+    frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+    notice_url = f"{frontend_url}/seller/notices/{violation_id}" if frontend_url else ""
 
     email = EmailMessage()
     email["Subject"] = f"CPSC violation notice: {recall_name}"
@@ -43,7 +48,9 @@ def send_violation_notification(
             f"Listing URL: {listing_url}\n"
             f"Current status: {violation_status}\n\n"
             f"Violation summary:\n{message}\n\n"
+            f"Evidence URL:\n{evidence_url}\n\n"
             f"Investigator notes:\n{investigator_notes}\n\n"
+            f"Seller portal notice:\n{notice_url or 'Configure FRONTEND_URL to include a direct portal link.'}\n\n"
             "Please review the listing immediately and take corrective action.\n"
         )
     )

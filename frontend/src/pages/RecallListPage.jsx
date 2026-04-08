@@ -6,6 +6,7 @@ import AddRecallModal from '../components/AddRecallModal'
 import RecallTable from '../components/RecallTable'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { showToast } from '../components/NotificationToast'
+import { useAuth } from '../context/AuthContext'
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value)
@@ -41,6 +42,7 @@ function formatDate(d) {
 }
 
 export default function RecallListPage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [recalls, setRecalls] = useState([])
   const [search, setSearch] = useState('')
@@ -51,6 +53,7 @@ export default function RecallListPage() {
   const [showAddModal, setShowAddModal] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
+  const isInvestigator = user?.role === 'Investigator'
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -185,6 +188,7 @@ export default function RecallListPage() {
               shortlistedIds={new Set(recalls.filter((recall) => recall.shortListID).map((recall) => recall.recallID))}
               onViewRecall={(recall) => navigate(`/recalls/${recall.recallID}`)}
               onPrioritizeRecall={(recall) => navigate(`/recalls/${recall.recallID}/prioritize`)}
+              showPrioritizeAction={!isInvestigator}
             />
 
             <div style={tableFooter}>

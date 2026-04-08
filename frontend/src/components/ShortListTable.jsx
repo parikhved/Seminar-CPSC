@@ -12,7 +12,7 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function ShortListTable({ items, onEdit, onDelete }) {
+export default function ShortListTable({ items, onEdit, onDelete, readOnly = false, actionRenderer = null }) {
   const [confirmId, setConfirmId] = useState(null)
 
   const TH = ({ children }) => (
@@ -85,46 +85,52 @@ export default function ShortListTable({ items, onEdit, onDelete }) {
                     {item.managerFirstName} {item.managerLastName}
                   </td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        onClick={() => onEdit(item)}
-                        title="Edit"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          padding: '5px 10px',
-                          borderRadius: 5,
-                          border: '1px solid #E2E8F0',
-                          backgroundColor: '#F8FAFC',
-                          color: '#0071BC',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Pencil size={13} />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setConfirmId(item.shortListID)}
-                        title="Delete"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          padding: '5px 10px',
-                          borderRadius: 5,
-                          border: '1px solid #FECACA',
-                          backgroundColor: '#FEF2F2',
-                          color: '#DC2626',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Trash2 size={13} />
-                        Delete
-                      </button>
-                    </div>
+                    {readOnly ? (
+                      actionRenderer ? actionRenderer(item) : (
+                        <span style={{ color: '#64748B', fontSize: 12 }}>Assigned</span>
+                      )
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => onEdit(item)}
+                          title="Edit"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '5px 10px',
+                            borderRadius: 5,
+                            border: '1px solid #E2E8F0',
+                            backgroundColor: '#F8FAFC',
+                            color: '#0071BC',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Pencil size={13} />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setConfirmId(item.shortListID)}
+                          title="Delete"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '5px 10px',
+                            borderRadius: 5,
+                            border: '1px solid #FECACA',
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={13} />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))
@@ -134,7 +140,7 @@ export default function ShortListTable({ items, onEdit, onDelete }) {
       </div>
 
       {/* Confirm Delete Dialog */}
-      {confirmId && (
+      {!readOnly && confirmId && (
         <div style={overlay}>
           <div style={{ ...modal, maxWidth: 400, textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
