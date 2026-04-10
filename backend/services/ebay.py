@@ -130,7 +130,7 @@ class EbayClient:
                     "q": query,
                     "limit": limit,
                     "sort": "newlyListed",
-                    "fieldgroups": "MATCHING_ITEMS,EXTENDED",
+                    "fieldgroups": "EXTENDED",
                 },
                 timeout=20.0,
             )
