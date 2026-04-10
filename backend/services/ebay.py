@@ -1,9 +1,12 @@
 import base64
+import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 EBAY_APP_SCOPE = "https://api.ebay.com/oauth/api_scope"
 
@@ -118,6 +121,9 @@ class EbayClient:
     def search_items(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
         token = self._get_access_token()
 
+        logger.info("eBay search | env=%s marketplace=%s query=%r limit=%s",
+                    self.environment, self.marketplace_id, query, limit)
+
         try:
             response = httpx.get(
                 f"{self.api_base_url}/buy/browse/v1/item_summary/search",
@@ -129,14 +135,13 @@ class EbayClient:
                 params={
                     "q": query,
                     "limit": limit,
-                    "sort": "newlyListed",
-                    "fieldgroups": "EXTENDED",
                 },
                 timeout=20.0,
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500]
+            logger.error("eBay search HTTP %s | body: %s", exc.response.status_code, detail)
             raise EbayApiError(f"eBay listing search failed: {detail}") from exc
         except httpx.HTTPError as exc:
             raise EbayApiError(f"Unable to reach the eBay Browse API: {exc}") from exc
