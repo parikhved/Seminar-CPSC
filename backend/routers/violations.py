@@ -26,6 +26,7 @@ from schemas import (
     ViolationOut,
     ViolationShortlistSearchRequest,
     ViolationShortlistSearchResponse,
+    ViolationStatusUpdate,
     ViolationUpdate,
 )
 from services import (
@@ -366,6 +367,7 @@ def _build_response_list_item(r: SellerResponse) -> SellerResponseListItem:
         violationProductName=recall.productName if recall else None,
         violationListingTitle=listing.listingTitle if listing else None,
         violationDateDetected=violation.dateDetected if violation else None,
+        violationStatus=violation.violationStatus if violation else None,
     )
 
 
@@ -758,6 +760,38 @@ def update_violation(
         if violation.dateDetected is None:
             violation.dateDetected = date.today()
 
+        db.commit()
+        db.refresh(violation)
+        return _build_violation_out(violation)
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.patch("/{violation_id}/status", response_model=ViolationOut)
+def update_violation_status(
+    violation_id: int,
+    payload: ViolationStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        violation = (
+            db.query(Violation)
+            .options(
+                joinedload(Violation.investigator),
+                joinedload(Violation.recipient),
+                joinedload(Violation.listing),
+                joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+                joinedload(Violation.seller_responses),
+            )
+            .filter(Violation.violationID == violation_id)
+            .first()
+        )
+        if not violation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Violation not found.",
+            )
+        violation.violationStatus = _validate_editable_status(payload.status)
         db.commit()
         db.refresh(violation)
         return _build_violation_out(violation)

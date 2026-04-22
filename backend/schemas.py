@@ -275,8 +275,13 @@ class SellerResponseListItem(BaseModel):
     violationProductName: Optional[str] = None
     violationListingTitle: Optional[str] = None
     violationDateDetected: Optional[date] = None
+    violationStatus: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class ViolationStatusUpdate(BaseModel):
+    status: str
 
 
 class SellerViolationNoticeOut(BaseModel):

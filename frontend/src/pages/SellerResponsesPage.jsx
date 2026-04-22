@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useAuth } from '../context/AuthContext'
 
 function formatDate(value) {
   if (!value) return 'N/A'
@@ -19,11 +20,23 @@ function getResponseTypeTone(type) {
   return { background: '#f3f4f6', color: '#475569' }
 }
 
+function getViolationStatusTone(s) {
+  const lower = (s || '').toLowerCase()
+  if (lower === 'resolved')         return { background: '#dcfce7', color: '#166534' }
+  if (lower === 'unresolved')       return { background: '#fef9c3', color: '#854d0e' }
+  if (lower === 'seller responded') return { background: '#dbeafe', color: '#1d4ed8' }
+  return { background: '#f3f4f6', color: '#475569' }
+}
+
 export default function SellerResponsesPage() {
+  const { user } = useAuth()
   const [responses, setResponses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detailTarget, setDetailTarget] = useState(null)
+  const [adjudicating, setAdjudicating] = useState(false)
+  const [adjudicateError, setAdjudicateError] = useState('')
+  const [archiveSuccess, setArchiveSuccess] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -38,6 +51,40 @@ export default function SellerResponsesPage() {
     }
     load()
   }, [])
+
+  async function handleStatusUpdate(violationID, newStatus) {
+    setAdjudicating(true)
+    setAdjudicateError('')
+    try {
+      await api.patch(`/api/violations/${violationID}/status`, { status: newStatus })
+      setDetailTarget(prev => ({ ...prev, violationStatus: newStatus }))
+      setResponses(prev => prev.map(r =>
+        r.violationID === violationID ? { ...r, violationStatus: newStatus } : r
+      ))
+    } catch (err) {
+      setAdjudicateError(err.response?.data?.detail ?? 'Failed to update status.')
+    } finally {
+      setAdjudicating(false)
+    }
+  }
+
+  async function handleArchive(violationID) {
+    setAdjudicating(true)
+    setAdjudicateError('')
+    try {
+      await api.delete(`/api/violations/${violationID}`)
+      setArchiveSuccess(true)
+      setTimeout(() => {
+        setArchiveSuccess(false)
+        setDetailTarget(null)
+        setResponses(prev => prev.filter(r => r.violationID !== violationID))
+      }, 1400)
+    } catch (err) {
+      setAdjudicateError(err.response?.data?.detail ?? 'Failed to archive case.')
+    } finally {
+      setAdjudicating(false)
+    }
+  }
 
   const stats = {
     total: responses.length,
@@ -159,8 +206,55 @@ export default function SellerResponsesPage() {
               </div>
             ) : null}
 
+            <div style={adjudicationSection}>
+              <div style={responseSectionLabel}>Adjudication</div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                <span style={{ fontSize: 13, color: '#475569' }}>Violation Status:</span>
+                <span style={{ ...statusPill, ...getViolationStatusTone(detailTarget.violationStatus) }}>
+                  {detailTarget.violationStatus || 'Unknown'}
+                </span>
+              </div>
+
+              {adjudicateError ? <div style={adjudicateErrorBox}>{adjudicateError}</div> : null}
+              {archiveSuccess ? <div style={archiveSuccessBox}>Case archived successfully.</div> : null}
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {(detailTarget.violationStatus || '').toLowerCase() !== 'resolved' ? (
+                  <button
+                    type="button"
+                    disabled={adjudicating}
+                    onClick={() => handleStatusUpdate(detailTarget.violationID, 'Resolved')}
+                    style={resolveButton}
+                  >
+                    {adjudicating ? 'Updating…' : 'Mark Resolved'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={adjudicating}
+                    onClick={() => handleStatusUpdate(detailTarget.violationID, 'Unresolved')}
+                    style={unresolveButton}
+                  >
+                    {adjudicating ? 'Updating…' : 'Mark Unresolved'}
+                  </button>
+                )}
+
+                {(detailTarget.violationStatus || '').toLowerCase() === 'resolved' && (
+                  <button
+                    type="button"
+                    disabled={adjudicating}
+                    onClick={() => handleArchive(detailTarget.violationID)}
+                    style={archiveButton}
+                  >
+                    {adjudicating ? 'Archiving…' : 'Archive Case'}
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div style={modalActions}>
-              <button type="button" onClick={() => setDetailTarget(null)} style={modalPrimaryButton}>
+              <button type="button" onClick={() => { setDetailTarget(null); setAdjudicateError('') }} style={modalPrimaryButton}>
                 Close
               </button>
             </div>
@@ -388,6 +482,80 @@ const modalPrimaryButton = {
   background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
   color: '#ffffff',
   fontSize: 14,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+
+const adjudicationSection = {
+  marginTop: 22,
+  paddingTop: 20,
+  borderTop: '1px solid #e2e8f0',
+}
+
+const statusPill = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '4px 10px',
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const adjudicateErrorBox = {
+  marginBottom: 12,
+  padding: '10px 14px',
+  borderRadius: 10,
+  backgroundColor: '#fef2f2',
+  border: '1px solid #fecaca',
+  color: '#b91c1c',
+  fontSize: 13,
+}
+
+const archiveSuccessBox = {
+  marginBottom: 12,
+  padding: '10px 14px',
+  borderRadius: 10,
+  backgroundColor: '#f0fdf4',
+  border: '1px solid #bbf7d0',
+  color: '#166534',
+  fontSize: 13,
+}
+
+const resolveButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '9px 16px',
+  borderRadius: 10,
+  border: 'none',
+  background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+  color: '#ffffff',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+
+const unresolveButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '9px 16px',
+  borderRadius: 10,
+  border: '1px solid #d1d5db',
+  background: '#ffffff',
+  color: '#374151',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+
+const archiveButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '9px 16px',
+  borderRadius: 10,
+  border: 'none',
+  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+  color: '#ffffff',
+  fontSize: 13,
   fontWeight: 700,
   cursor: 'pointer',
 }

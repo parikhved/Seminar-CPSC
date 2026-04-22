@@ -117,10 +117,10 @@ export default function LoginPage() {
 
           <div style={demoCard}>
             <div style={demoHeading}>Demo Credentials</div>
-            <div style={demoValue}>Email: emily.carter@cpsc-sim.gov</div>
-            <div style={demoValue}>Password: demo123</div>
-            <div style={{ ...demoValue, marginTop: 10 }}>Investigator: daniel.kim@cpsc-investigator.gov</div>
-            <div style={demoValue}>Seller: priya.shah@gmail.com</div>
+            <div style={demoValue}>Password for all accounts: demo123</div>
+            <div style={{ ...demoValue, marginTop: 10 }}>Manager: emily.carter@cpsc-sim.gov</div>
+            <div style={demoValue}>Investigator: daniel.kim@cpsc-investigator.gov</div>
+            <div style={demoValue}>Seller: domufii@gmail.com</div>
           </div>
         </div>
 
