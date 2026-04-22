@@ -75,8 +75,8 @@ export default function InvestigatorDashboardPage() {
   useEffect(() => {
     async function load() {
       const [shortlistResult, violationsResult] = await Promise.allSettled([
-        api.get('/api/shortlist'),
-        api.get('/api/violations'),
+        api.get('/api/shortlist', { params: { investigatorUserID: user?.userID } }),
+        api.get('/api/violations', { params: { investigatorUserID: user?.userID } }),
       ])
 
       if (shortlistResult.status !== 'fulfilled') {
@@ -154,7 +154,7 @@ export default function InvestigatorDashboardPage() {
           <div style={panelHeader}>
             <div>
               <h2 style={panelTitle}>Assigned Recalls</h2>
-              <p style={panelCopy}>Sprint 2 treats the priority list as the active investigator queue.</p>
+              <p style={panelCopy}>Recalls assigned to you by a Manager appear here. Unassigned recalls can be viewed on the full Priority List.</p>
             </div>
             {featuredRecallId ? (
               <Link to={`/violations/logging?recallId=${featuredRecallId}`} style={primaryAction}>

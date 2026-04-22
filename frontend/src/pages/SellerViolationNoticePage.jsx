@@ -15,12 +15,15 @@ function formatDate(value) {
   })
 }
 
+const RESPONSE_TYPE_OPTIONS = ['Removed Listing', 'Remediated Product', 'Contesting Violation']
+
 export default function SellerViolationNoticePage() {
   const { violationId } = useParams()
   const { user } = useAuth()
   const [notice, setNotice] = useState(null)
   const [responseText, setResponseText] = useState('')
-  const [evidenceURL, setEvidenceURL] = useState('')
+  const [supportingURL, setSupportingURL] = useState('')
+  const [responseType, setResponseType] = useState(RESPONSE_TYPE_OPTIONS[0])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -31,7 +34,7 @@ export default function SellerViolationNoticePage() {
         const response = await api.get(`/api/violations/notices/${user.userID}/${violationId}`)
         setNotice(response.data)
         setResponseText(response.data.sellerResponse || '')
-        setEvidenceURL(response.data.responseEvidenceURL || '')
+        setSupportingURL(response.data.responseEvidenceURL || '')
       } catch (err) {
         setError(err.response?.data?.detail ?? 'Unable to load this violation notice.')
       } finally {
@@ -49,14 +52,16 @@ export default function SellerViolationNoticePage() {
     try {
       await api.post(`/api/violations/${violationId}/responses`, {
         sellerUserID: user.userID,
-        response: responseText.trim(),
-        evidenceURL: evidenceURL.trim(),
+        sellerEmail: user.email,
+        responseType,
+        responseText: responseText.trim(),
+        supportingURL: supportingURL.trim(),
       })
 
       const refreshed = await api.get(`/api/violations/notices/${user.userID}/${violationId}`)
       setNotice(refreshed.data)
       setResponseText(refreshed.data.sellerResponse || '')
-      setEvidenceURL(refreshed.data.responseEvidenceURL || '')
+      setSupportingURL(refreshed.data.responseEvidenceURL || '')
       showToast('Seller response submitted successfully.', 'success')
     } catch (err) {
       showToast(err.response?.data?.detail ?? 'Unable to submit your response.', 'error')
@@ -122,23 +127,42 @@ export default function SellerViolationNoticePage() {
           <h2 style={panelTitle}>Submit Response + Evidence</h2>
           <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
             <label style={fieldBlock}>
+              <span style={label}>Response Type</span>
+              <select
+                value={responseType}
+                onChange={(event) => setResponseType(event.target.value)}
+                style={input}
+                required
+              >
+                {RESPONSE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={fieldBlock}>
               <span style={label}>Seller Response</span>
               <textarea
                 value={responseText}
                 onChange={(event) => setResponseText(event.target.value)}
                 rows={8}
                 style={textarea}
+                placeholder="Describe the action you have taken (max 500 characters)"
+                maxLength={500}
                 required
               />
+              <span style={{ fontSize: 12, color: responseText.length > 480 ? '#b91c1c' : '#64748b', display: 'block', marginTop: 4 }}>
+                {responseText.length}/500
+              </span>
             </label>
 
             <label style={fieldBlock}>
-              <span style={label}>Evidence URL</span>
+              <span style={label}>Supporting Evidence URL</span>
               <input
                 type="url"
-                value={evidenceURL}
-                onChange={(event) => setEvidenceURL(event.target.value)}
-                placeholder="proof of removal, refund, or corrective action"
+                value={supportingURL}
+                onChange={(event) => setSupportingURL(event.target.value)}
+                placeholder="https://... proof of removal, refund, or corrective action"
                 style={input}
                 required
               />

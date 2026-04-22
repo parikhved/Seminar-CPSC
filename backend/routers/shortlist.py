@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Recall, ShortList, User
-from schemas import OKRMetrics, ShortListCreate, ShortListOut, ShortListUpdate
+from schemas import InvestigatorOut, OKRMetrics, ShortListAssign, ShortListCreate, ShortListOut, ShortListUpdate
 
 router = APIRouter(prefix="/api/shortlist", tags=["ShortList"])
 
@@ -17,6 +17,7 @@ VALID_PRIORITIES = {"Low", "Medium", "High", "Critical"}
 def _build_shortlist_out(entry: ShortList) -> ShortListOut:
     recall = entry.recall
     manager = entry.manager
+    investigator = entry.assigned_investigator
     return ShortListOut(
         shortListID=entry.shortListID,
         priorityLevel=entry.priorityLevel,
@@ -31,6 +32,10 @@ def _build_shortlist_out(entry: ShortList) -> ShortListOut:
         remedy=recall.remedy if recall else None,
         managerFirstName=manager.firstName if manager else None,
         managerLastName=manager.lastName if manager else None,
+        assignedInvestigatorID=entry.assignedInvestigatorID,
+        assignedInvestigatorName=(
+            f"{investigator.firstName} {investigator.lastName}" if investigator else None
+        ),
     )
 
 
@@ -81,14 +86,28 @@ def get_okr_metrics(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/investigators", response_model=list[InvestigatorOut])
+def list_investigators(db: Session = Depends(get_db)):
+    users = (
+        db.query(User)
+        .filter(User.role == "Investigator")
+        .order_by(User.firstName, User.lastName)
+        .all()
+    )
+    return [InvestigatorOut(userID=u.userID, firstName=u.firstName, lastName=u.lastName, email=u.email) for u in users]
+
+
 @router.get("", response_model=list[ShortListOut])
 def list_shortlist(
     priority: Optional[str] = Query(None),
+    investigatorUserID: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
     query = db.query(ShortList)
     if priority:
         query = query.filter(ShortList.priorityLevel == priority)
+    if investigatorUserID is not None:
+        query = query.filter(ShortList.assignedInvestigatorID == investigatorUserID)
     entries = query.order_by(ShortList.shortListDate.desc()).all()
     return [_build_shortlist_out(e) for e in entries]
 
@@ -164,6 +183,35 @@ def update_shortlist(
 
     if payload.notes is not None:
         entry.notes = payload.notes
+
+    db.commit()
+    db.refresh(entry)
+    return _build_shortlist_out(entry)
+
+
+@router.patch("/{shortlist_id}/assign", response_model=ShortListOut)
+def assign_investigator(
+    shortlist_id: int,
+    payload: ShortListAssign,
+    db: Session = Depends(get_db),
+):
+    entry = db.query(ShortList).filter(ShortList.shortListID == shortlist_id).first()
+    if not entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ShortList entry not found.",
+        )
+
+    if payload.investigatorUserID is not None:
+        investigator = db.query(User).filter(User.userID == payload.investigatorUserID).first()
+        if not investigator or investigator.role != "Investigator":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User must be an Investigator to be assigned.",
+            )
+        entry.assignedInvestigatorID = investigator.userID
+    else:
+        entry.assignedInvestigatorID = None
 
     db.commit()
     db.refresh(entry)

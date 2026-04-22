@@ -68,6 +68,19 @@ class ShortListUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class ShortListAssign(BaseModel):
+    investigatorUserID: Optional[int] = None
+
+
+class InvestigatorOut(BaseModel):
+    userID: int
+    firstName: str
+    lastName: str
+    email: str
+
+    model_config = {"from_attributes": True}
+
+
 class ShortListOut(BaseModel):
     shortListID: int
     priorityLevel: str
@@ -86,6 +99,10 @@ class ShortListOut(BaseModel):
     # Manager name
     managerFirstName: Optional[str] = None
     managerLastName: Optional[str] = None
+
+    # Assigned investigator
+    assignedInvestigatorID: Optional[int] = None
+    assignedInvestigatorName: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

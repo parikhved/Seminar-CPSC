@@ -3,7 +3,8 @@
     "allow": [
       "Bash(brew list *)",
       "Bash(pip show *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(xargs ls *)"
     ]
   }
 }

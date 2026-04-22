@@ -14,7 +14,7 @@ import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { showToast } from '../components/NotificationToast'
 
-const STATUS_OPTIONS = ['Logged', 'Open', 'Pending Seller Response', 'Under Review', 'Closed']
+const INITIAL_STATUS = 'Unresolved'
 
 function formatDate(value) {
   if (!value) return 'N/A'
@@ -98,7 +98,7 @@ export default function ViolationLoggingPage() {
   const [candidates, setCandidates] = useState([])
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [sellerEmail, setSellerEmail] = useState('')
-  const [violationStatus, setViolationStatus] = useState('Logged')
+  const [violationStatus] = useState(INITIAL_STATUS)
   const [message, setMessage] = useState('')
   const [evidenceURL, setEvidenceURL] = useState('')
   const [investigatorNotes, setInvestigatorNotes] = useState('')
@@ -473,15 +473,6 @@ export default function ViolationLoggingPage() {
                     required
                   />
                   <span style={helperText}>Required because eBay Browse API does not expose seller email.</span>
-                </label>
-
-                <label style={fieldBlock}>
-                  <span style={label}>Violation Status</span>
-                  <select value={violationStatus} onChange={(event) => setViolationStatus(event.target.value)} style={input}>
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
                 </label>
 
                 <label style={fieldBlock}>

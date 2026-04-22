@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext'
 const DESCRIPTION_MAX = 500
 const RESPONSE_TEXT_MAX = 500
 const SUPPORTING_URL_MAX = 2048
-const STATUS_OPTIONS = ['Unresolved', 'Resolved']
+const STATUS_OPTIONS = ['Unresolved', 'Under Review', 'Pending Seller Response', 'Resolved']
 const MATCH_OPTIONS = [
   { label: 'True', value: 'true' },
   { label: 'False', value: 'false' },
@@ -37,7 +37,9 @@ function isResolved(status) {
 }
 
 function normalizeEditableStatus(status) {
-  return isResolved(status) ? 'Resolved' : 'Unresolved'
+  const s = String(status || '').trim()
+  if (STATUS_OPTIONS.includes(s)) return s
+  return isResolved(s) ? 'Resolved' : 'Unresolved'
 }
 
 function getStatusTone(status) {
@@ -103,6 +105,7 @@ function validateRespondForm(form) {
 export default function ViolationListPage() {
   const { user } = useAuth()
   const isSeller = user?.role === 'Seller'
+  const isInvestigator = user?.role === 'Investigator'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [violations, setViolations] = useState([])
@@ -120,6 +123,7 @@ export default function ViolationListPage() {
   const [respondForm, setRespondForm] = useState(null)
   const [respondErrors, setRespondErrors] = useState({})
   const [respondSuccess, setRespondSuccess] = useState(false)
+  const [viewAllViolations, setViewAllViolations] = useState(false)
 
   const recallFilter = searchParams.get('recallId')
   const filteredViolations = recallFilter
@@ -129,12 +133,17 @@ export default function ViolationListPage() {
 
   useEffect(() => {
     loadViolations()
-  }, [])
+  }, [viewAllViolations])
 
   async function loadViolations() {
     setLoading(true)
     try {
-      const params = isSeller && user?.userID ? `?sellerUserID=${user.userID}` : ''
+      let params = ''
+      if (isSeller && user?.userID) {
+        params = `?sellerUserID=${user.userID}`
+      } else if (isInvestigator && user?.userID && !viewAllViolations) {
+        params = `?investigatorUserID=${user.userID}`
+      }
       const response = await api.get(`/api/violations${params}`)
       setViolations(response.data)
       setError('')
@@ -278,12 +287,23 @@ export default function ViolationListPage() {
           <p style={subtitle}>
             {isSeller
               ? 'Review violations for your listings and submit your response for each one.'
-              : 'Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.'}
+              : isInvestigator && !viewAllViolations
+                ? 'Showing violations you logged. Toggle "All Violations" to see the full system list.'
+                : 'Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.'}
           </p>
         </div>
 
         {!isSeller && (
           <div style={headerActions}>
+            {isInvestigator && (
+              <button
+                type="button"
+                onClick={() => setViewAllViolations((v) => !v)}
+                style={viewToggleButton}
+              >
+                {viewAllViolations ? 'My Violations' : 'All Violations'}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSearch}
@@ -732,6 +752,20 @@ const secondaryButton = {
   color: '#0f172a',
   fontSize: 14,
   fontWeight: 600,
+  cursor: 'pointer',
+}
+
+const viewToggleButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '12px 18px',
+  borderRadius: 14,
+  border: '1px solid #818cf8',
+  backgroundColor: '#eef2ff',
+  color: '#3730a3',
+  fontSize: 14,
+  fontWeight: 700,
   cursor: 'pointer',
 }
 

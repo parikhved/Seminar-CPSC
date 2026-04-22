@@ -136,6 +136,14 @@ def _violation_documentation_complete(violation: Violation) -> bool:
     return all(_has_required_value(value) for value in required_values)
 
 
+EDITABLE_STATUSES = {
+    "unresolved": "Unresolved",
+    "under review": "Under Review",
+    "pending seller response": "Pending Seller Response",
+    "resolved": "Resolved",
+}
+
+
 def _validate_editable_status(value: str) -> str:
     normalized = _clean_text(value)
     if not normalized:
@@ -145,13 +153,14 @@ def _validate_editable_status(value: str) -> str:
         )
 
     lowered = normalized.lower()
-    if lowered not in {"resolved", "unresolved"}:
+    canonical = EDITABLE_STATUSES.get(lowered)
+    if not canonical:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Violation status must be either "resolved" or "unresolved".',
+            detail=f"Violation status must be one of: {', '.join(EDITABLE_STATUSES.values())}.",
         )
 
-    return lowered.capitalize()
+    return canonical
 
 
 def _find_seller_user_by_email(db: Session, seller_email: Optional[str]) -> Optional[User]:
@@ -372,7 +381,11 @@ def _build_response_list_item(r: SellerResponse) -> SellerResponseListItem:
 
 
 @router.get("", response_model=list[ViolationOut])
-def list_violations(sellerUserID: Optional[int] = None, db: Session = Depends(get_db)):
+def list_violations(
+    sellerUserID: Optional[int] = None,
+    investigatorUserID: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
     try:
         query = (
             db.query(Violation)
@@ -396,6 +409,9 @@ def list_violations(sellerUserID: Optional[int] = None, db: Session = Depends(ge
                     )
                 )
             )
+
+        if investigatorUserID is not None:
+            query = query.filter(Violation.investigatorID == investigatorUserID)
 
         violations = query.order_by(Violation.dateDetected.desc(), Violation.violationID.desc()).all()
         return [_build_violation_out(violation) for violation in violations]
@@ -791,7 +807,23 @@ def update_violation_status(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Violation not found.",
             )
-        violation.violationStatus = _validate_editable_status(payload.status)
+        new_status = _validate_editable_status(payload.status)
+        violation.violationStatus = new_status
+
+        if new_status == "Resolved":
+            existing_adj = db.query(Adjudication).filter(
+                Adjudication.violationID == violation.violationID
+            ).first()
+            if not existing_adj:
+                adj = Adjudication(
+                    finalStatus="Resolved",
+                    notes="Marked resolved via adjudication panel.",
+                    dateAdjudicated=date.today(),
+                    violationID=violation.violationID,
+                    investigatorID=violation.investigatorID,
+                )
+                db.add(adj)
+
         db.commit()
         db.refresh(violation)
         return _build_violation_out(violation)

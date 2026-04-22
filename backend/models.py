@@ -14,7 +14,8 @@ class User(Base):
     role      = Column("role",      String(20),  nullable=False)
     phoneNum  = Column("phoneNum",  String(12))
 
-    shortlists  = relationship("ShortList",      back_populates="manager",      foreign_keys="ShortList.managerUserID")
+    shortlists           = relationship("ShortList", back_populates="manager",               foreign_keys="ShortList.managerUserID")
+    assigned_shortlists  = relationship("ShortList", back_populates="assigned_investigator", foreign_keys="ShortList.assignedInvestigatorID")
     listings    = relationship("ProductListing", back_populates="seller",       foreign_keys="ProductListing.sellerUserID")
     detected_violations = relationship(
         "Violation",
@@ -58,15 +59,17 @@ class Recall(Base):
 class ShortList(Base):
     __tablename__ = "shortList"
 
-    shortListID   = Column("shortListID",   Integer,     primary_key=True, index=True)
-    priorityLevel = Column("priorityLevel", String(15),  nullable=False)
-    shortListDate = Column("shortListDate", Date,        nullable=False)
-    notes         = Column("notes",         String(500))
-    managerUserID = Column("managerUserID", Integer,     ForeignKey("user.userID"), nullable=False)
-    recallID      = Column("recallID",      Integer,     ForeignKey("recall.recallID"), nullable=False, unique=True)
+    shortListID              = Column("shortListID",              Integer,  primary_key=True, index=True)
+    priorityLevel            = Column("priorityLevel",            String(15), nullable=False)
+    shortListDate            = Column("shortListDate",            Date,       nullable=False)
+    notes                    = Column("notes",                    String(500))
+    managerUserID            = Column("managerUserID",            Integer,  ForeignKey("user.userID"), nullable=False)
+    recallID                 = Column("recallID",                 Integer,  ForeignKey("recall.recallID"), nullable=False, unique=True)
+    assignedInvestigatorID   = Column("assignedInvestigatorID",   Integer,  ForeignKey("user.userID"))
 
-    manager = relationship("User",   back_populates="shortlists", foreign_keys=[managerUserID])
-    recall  = relationship("Recall", back_populates="shortlist_entry")
+    manager              = relationship("User", back_populates="shortlists",          foreign_keys=[managerUserID])
+    assigned_investigator = relationship("User", back_populates="assigned_shortlists", foreign_keys=[assignedInvestigatorID])
+    recall               = relationship("Recall", back_populates="shortlist_entry")
 
 
 class Marketplace(Base):

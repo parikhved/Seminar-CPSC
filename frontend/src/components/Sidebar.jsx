@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { BarChart3, FileSearch, LayoutDashboard, MessageSquare, ShieldAlert, Siren } from 'lucide-react'
+import { BarChart3, Bell, FileSearch, LayoutDashboard, MessageSquare, ShieldAlert, Siren } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Sidebar() {
@@ -8,6 +8,7 @@ export default function Sidebar() {
 
   const navItems = user?.role === 'Seller'
     ? [
+        { label: 'Violation Notices', icon: Bell, path: '/seller/notices' },
         { label: 'Violation List', icon: Siren, path: '/violations' },
       ]
     : user?.role === 'Investigator'

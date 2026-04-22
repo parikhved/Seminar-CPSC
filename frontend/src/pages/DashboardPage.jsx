@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Bell, CheckCircle2, Clock3, FileUp, ShieldAlert } from 'lucide-react'
+import { Bell, CheckCircle2, Clock3, FileUp, Send, ShieldAlert } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -30,6 +30,24 @@ function ManagerDashboardPage() {
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [sendingReminders, setSendingReminders] = useState(false)
+
+  async function handleSendReminders() {
+    setSendingReminders(true)
+    try {
+      const res = await api.post('/api/violations/remind-overdue')
+      const { remindersSent, totalOverdue } = res.data
+      if (remindersSent > 0) {
+        showToast(`SLA reminders sent to ${remindersSent} of ${totalOverdue} overdue seller(s).`, 'success')
+      } else {
+        showToast(`No overdue violations found that need reminders right now.`, 'info')
+      }
+    } catch {
+      showToast('Failed to send SLA reminders — please try again.', 'error')
+    } finally {
+      setSendingReminders(false)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -127,10 +145,11 @@ function ManagerDashboardPage() {
               <button
                 type="button"
                 style={{ ...quickButton, backgroundColor: '#dcfce7' }}
-                onClick={() => showToast('Investigator notification queued for the latest priority review.', 'success')}
+                onClick={handleSendReminders}
+                disabled={sendingReminders}
               >
-                <Bell size={18} />
-                Notify Investigator
+                <Send size={18} />
+                {sendingReminders ? 'Sending…' : 'Send SLA Reminders'}
               </button>
             </div>
           </div>

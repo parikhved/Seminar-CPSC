@@ -47,13 +47,14 @@ export default function ShortListTable({ items, onEdit, onDelete, readOnly = fal
               <TH>Notes</TH>
               <TH>Date Added</TH>
               <TH>Manager</TH>
+              <TH>Assigned Investigator</TH>
               <TH>Actions</TH>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14, backgroundColor: '#FFFFFF' }}>
+                <td colSpan={10} style={{ padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14, backgroundColor: '#FFFFFF' }}>
                   No items on the priority list yet.
                 </td>
               </tr>
@@ -83,6 +84,11 @@ export default function ShortListTable({ items, onEdit, onDelete, readOnly = fal
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>{formatDate(item.shortListDate)}</td>
                   <td style={td}>
                     {item.managerFirstName} {item.managerLastName}
+                  </td>
+                  <td style={td}>
+                    {item.assignedInvestigatorName
+                      ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{item.assignedInvestigatorName}</span>
+                      : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unassigned</span>}
                   </td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>
                     {readOnly ? (
