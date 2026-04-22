@@ -17,6 +17,7 @@ import ViolationListPage from './pages/ViolationListPage'
 import ViolationLoggingPage from './pages/ViolationLoggingPage'
 import SellerNoticesPage from './pages/SellerNoticesPage'
 import SellerViolationNoticePage from './pages/SellerViolationNoticePage'
+import SellerResponsesPage from './pages/SellerResponsesPage'
 
 function AuthenticatedLayout({ children }) {
   return (
@@ -136,6 +137,16 @@ export default function App() {
               <ProtectedRoute>
                 <AuthenticatedLayout>
                   <SellerViolationNoticePage />
+                </AuthenticatedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seller-responses"
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout>
+                  <SellerResponsesPage />
                 </AuthenticatedLayout>
               </ProtectedRoute>
             }

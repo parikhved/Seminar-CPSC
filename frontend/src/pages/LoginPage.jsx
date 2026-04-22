@@ -20,9 +20,10 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(email, password)
+      const userData = await login(email, password)
       const nextPath = location.state?.from
-      navigate(nextPath || '/dashboard')
+      const defaultPath = userData?.role === 'Seller' ? '/violations' : '/dashboard'
+      navigate(nextPath || defaultPath)
     } catch (err) {
       if (!err.response) {
         setError('Server is unavailable or starting up — please wait 30 seconds and try again.')

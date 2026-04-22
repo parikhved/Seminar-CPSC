@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -30,6 +30,11 @@ class User(Base):
         "SellerResponse",
         back_populates="seller",
         foreign_keys="SellerResponse.sellerUserID",
+    )
+    messages = relationship(
+        "Message",
+        back_populates="user",
+        foreign_keys="Message.userID",
     )
 
 
@@ -122,21 +127,46 @@ class Violation(Base):
     recipient = relationship("User", back_populates="received_violations", foreign_keys=[receivedByID])
     recall = relationship("Recall", back_populates="violations")
     listing = relationship("ProductListing", back_populates="violations")
-    seller_responses = relationship("SellerResponse", back_populates="violation")
+    seller_responses = relationship("SellerResponse", back_populates="violation", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="violation")
+
+
+class Message(Base):
+    __tablename__ = "message"
+
+    messageid          = Column("messageid",           Integer,     primary_key=True, index=True)
+    senttoemailaddress = Column("senttoemailaddress",  String(100), nullable=False)
+    responsetype       = Column("responsetype",        String(100))
+    messagecontent     = Column("messagecontent",      String(500))
+    message_datetime   = Column("datetime",            DateTime,    nullable=False)
+    violationID        = Column("violationID",         Integer,     ForeignKey("violation.violationID"), nullable=False)
+    responseid         = Column("responseid",          Integer)
+    userID             = Column("userID",              Integer,     ForeignKey("user.userID"), nullable=False)
+
+    violation = relationship("Violation", back_populates="messages")
+    user      = relationship("User", back_populates="messages", foreign_keys=[userID])
+    seller_response = relationship(
+        "SellerResponse",
+        back_populates="message",
+        foreign_keys="SellerResponse.messageid",
+        uselist=False,
+    )
 
 
 class SellerResponse(Base):
     __tablename__ = "sellerResponse"
 
     responseID    = Column("responseID",    Integer,      primary_key=True, index=True)
-    response      = Column("response",      String(400))
+    responseType  = Column("responseType",  String(100),  nullable=False)
     evidenceURL   = Column("evidenceURL",   String(500))
-    dateResponded = Column("dateResponded", Date)
-    violationID   = Column("violationID",   Integer,      ForeignKey("violation.violationID"))
-    sellerUserID  = Column("sellerUserID",  Integer,      ForeignKey("user.userID"))
+    dateResponded = Column("dateResponded", Date,         nullable=False)
+    violationID   = Column("violationID",   Integer,      ForeignKey("violation.violationID"), nullable=False)
+    sellerUserID  = Column("sellerUserID",  Integer,      ForeignKey("user.userID"),           nullable=False)
+    messageid     = Column("messageid",     Integer,      ForeignKey("message.messageid"),     nullable=False)
 
     violation = relationship("Violation", back_populates="seller_responses")
-    seller = relationship("User", back_populates="seller_responses", foreign_keys=[sellerUserID])
+    seller    = relationship("User", back_populates="seller_responses", foreign_keys=[sellerUserID])
+    message   = relationship("Message", back_populates="seller_response", foreign_keys=[messageid])
 
 
 class Adjudication(Base):

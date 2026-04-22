@@ -1,30 +1,32 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { BarChart3, FileSearch, LayoutDashboard, ShieldAlert, Siren } from 'lucide-react'
+import { BarChart3, FileSearch, LayoutDashboard, MessageSquare, ShieldAlert, Siren } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Sidebar() {
   const { user } = useAuth()
-  const navItems = user?.role === 'Investigator'
+
+  const navItems = user?.role === 'Seller'
     ? [
-        { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-        { label: 'Assigned Recalls', icon: ShieldAlert, path: '/shortlist' },
         { label: 'Violation List', icon: Siren, path: '/violations' },
-        { label: 'All Recalls', icon: FileSearch, path: '/recalls' },
-        { label: 'Analytics', icon: BarChart3, path: '/analytics' },
       ]
-    : user?.role === 'Seller'
+    : user?.role === 'Investigator'
       ? [
           { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-          { label: 'Violation Notices', icon: Siren, path: '/seller/notices' },
+          { label: 'Assigned Recalls', icon: ShieldAlert, path: '/shortlist' },
+          { label: 'Violation List', icon: Siren, path: '/violations' },
+          { label: 'Seller Responses', icon: MessageSquare, path: '/seller-responses' },
+          { label: 'All Recalls', icon: FileSearch, path: '/recalls' },
+          { label: 'Analytics', icon: BarChart3, path: '/analytics' },
         ]
-    : [
-        { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-        { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
-        { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
-        { label: 'Violation List', icon: Siren, path: '/violations' },
-        { label: 'Analytics', icon: BarChart3, path: '/analytics' },
-      ]
+      : [
+          { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+          { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
+          { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
+          { label: 'Violation List', icon: Siren, path: '/violations' },
+          { label: 'Seller Responses', icon: MessageSquare, path: '/seller-responses' },
+          { label: 'Analytics', icon: BarChart3, path: '/analytics' },
+        ]
 
   return (
     <aside style={aside}>
@@ -47,10 +49,10 @@ export default function Sidebar() {
 
       <div style={footerCard}>
         <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Marketplace MVP
+          Sprint 3
         </div>
         <div style={{ marginTop: 8, fontSize: 14, color: '#e2e8f0', lineHeight: 1.5 }}>
-          Detect recalled products on eBay, log violations, and keep seller outreach moving.
+          Track seller responses to recalled product violations and monitor SLA compliance.
         </div>
       </div>
     </aside>

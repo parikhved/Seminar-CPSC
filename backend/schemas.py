@@ -195,6 +195,7 @@ class ViolationOut(BaseModel):
     violationID: int
     isViolation: bool
     violationStatus: Optional[str] = None
+    responseStatus: str = "No Response"
     message: Optional[str] = None
     evidenceURL: Optional[str] = None
     dateDetected: Optional[date] = None
@@ -234,19 +235,46 @@ class ViolationCreateResponse(ViolationOut):
     notificationDetail: str
 
 
+# Valid dropdown choices for seller response type
+RESPONSE_TYPE_OPTIONS = ["Removed Listing", "Remediated Product", "Contesting Violation"]
+RESPONSE_TEXT_MAX = 500
+SUPPORTING_URL_MAX = 2048
+
+
 class SellerResponseCreate(BaseModel):
     sellerUserID: int
-    response: str
-    evidenceURL: str
+    sellerEmail: str
+    responseType: str          # one of RESPONSE_TYPE_OPTIONS
+    responseText: str          # up to RESPONSE_TEXT_MAX chars
+    supportingURL: str         # must start with https://, no spaces, ≤ SUPPORTING_URL_MAX
 
 
 class SellerResponseOut(BaseModel):
     responseID: int
-    response: Optional[str] = None
+    responseType: str
     evidenceURL: Optional[str] = None
-    dateResponded: Optional[date] = None
+    dateResponded: date
     violationID: int
     sellerUserID: int
+    messageid: int
+    responseText: Optional[str] = None   # from linked message.messagecontent
+    sellerEmail: Optional[str] = None    # from linked message.senttoemailaddress
+
+    model_config = {"from_attributes": True}
+
+
+class SellerResponseListItem(BaseModel):
+    responseID: int
+    violationID: int
+    responseType: str
+    evidenceURL: Optional[str] = None
+    dateResponded: date
+    sellerUserID: int
+    sellerEmail: Optional[str] = None
+    responseText: Optional[str] = None
+    violationProductName: Optional[str] = None
+    violationListingTitle: Optional[str] = None
+    violationDateDetected: Optional[date] = None
 
     model_config = {"from_attributes": True}
 
@@ -254,6 +282,7 @@ class SellerResponseOut(BaseModel):
 class SellerViolationNoticeOut(BaseModel):
     violationID: int
     violationStatus: Optional[str] = None
+    responseStatus: str = "No Response"
     message: Optional[str] = None
     evidenceURL: Optional[str] = None
     dateDetected: Optional[date] = None
@@ -295,3 +324,22 @@ class ViolationAnalyticsOverview(BaseModel):
     newViolationsTotal: int
     documentationCompletion: ViolationDocumentationMetrics
     resolutionRate: ViolationResolutionMetrics
+
+
+# ── Sprint 3 OKR Analytics ────────────────────────────────────────────────────
+
+class SellerResponseRateMetrics(BaseModel):
+    respondedWithin14Days: int
+    totalViolations: int
+    responseRatePercentage: float
+    baseline: int = 0
+    target: int = 5
+
+
+class SellerResponseDocumentationMetrics(BaseModel):
+    completeResponses: int
+    incompleteResponses: int
+    totalResponses: int
+    completenessPercentage: float
+    baseline: int = 0
+    target: int = 5

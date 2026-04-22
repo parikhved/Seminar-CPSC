@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   ExternalLink,
+  MessageSquare,
   Pencil,
   Search,
   ShieldAlert,
@@ -13,11 +14,14 @@ import { showToast } from '../components/NotificationToast'
 import { useAuth } from '../context/AuthContext'
 
 const DESCRIPTION_MAX = 500
+const RESPONSE_TEXT_MAX = 500
+const SUPPORTING_URL_MAX = 2048
 const STATUS_OPTIONS = ['Unresolved', 'Resolved']
 const MATCH_OPTIONS = [
   { label: 'True', value: 'true' },
   { label: 'False', value: 'false' },
 ]
+const RESPONSE_TYPE_OPTIONS = ['Removed Listing', 'Remediated Product', 'Contesting Violation']
 
 function formatDate(value) {
   if (!value) return 'N/A'
@@ -37,16 +41,17 @@ function normalizeEditableStatus(status) {
 }
 
 function getStatusTone(status) {
-  if (isResolved(status)) {
-    return { background: '#dcfce7', color: '#166534' }
-  }
+  if (isResolved(status)) return { background: '#dcfce7', color: '#166534' }
   return { background: '#fee2e2', color: '#b91c1c' }
 }
 
+function getResponseStatusTone(responseStatus) {
+  if (responseStatus === 'Responded') return { background: '#dcfce7', color: '#166534' }
+  return { background: '#fef3c7', color: '#92400e' }
+}
+
 function getMatchTone(matchConfirmation) {
-  if (matchConfirmation) {
-    return { background: '#dbeafe', color: '#1d4ed8' }
-  }
+  if (matchConfirmation) return { background: '#dbeafe', color: '#1d4ed8' }
   return { background: '#f3f4f6', color: '#475569' }
 }
 
@@ -56,6 +61,7 @@ function summarizeViolations(items) {
     unresolved: items.filter((item) => !isResolved(item.status || item.violationStatus)).length,
     resolved: items.filter((item) => isResolved(item.status || item.violationStatus)).length,
     complete: items.filter((item) => item.documentationComplete).length,
+    responded: items.filter((item) => item.responseStatus === 'Responded').length,
   }
 }
 
@@ -67,8 +73,36 @@ function buildEditState(violation) {
   }
 }
 
+function buildRespondState(violation, sellerEmail) {
+  return {
+    sellerEmail: sellerEmail || '',
+    responseType: RESPONSE_TYPE_OPTIONS[0],
+    responseText: '',
+    supportingURL: '',
+  }
+}
+
+function validateRespondForm(form) {
+  const errors = {}
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!form.sellerEmail || !emailRegex.test(form.sellerEmail)) {
+    errors.sellerEmail = 'Please enter a valid email address'
+  }
+  if (!form.responseText || form.responseText.trim() === '') {
+    errors.responseText = 'Response cannot be empty.'
+  } else if (form.responseText.length > RESPONSE_TEXT_MAX) {
+    errors.responseText = `Response exceeds ${RESPONSE_TEXT_MAX} character limit`
+  }
+  const url = form.supportingURL.trim()
+  if (!url || !url.startsWith('https://') || url.includes(' ') || url.length > SUPPORTING_URL_MAX) {
+    errors.supportingURL = 'Please enter a proper URL link'
+  }
+  return errors
+}
+
 export default function ViolationListPage() {
   const { user } = useAuth()
+  const isSeller = user?.role === 'Seller'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [violations, setViolations] = useState([])
@@ -76,11 +110,16 @@ export default function ViolationListPage() {
   const [searching, setSearching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [editTarget, setEditTarget] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [searchSummary, setSearchSummary] = useState(null)
+  const [respondTarget, setRespondTarget] = useState(null)
+  const [respondForm, setRespondForm] = useState(null)
+  const [respondErrors, setRespondErrors] = useState({})
+  const [respondSuccess, setRespondSuccess] = useState(false)
 
   const recallFilter = searchParams.get('recallId')
   const filteredViolations = recallFilter
@@ -95,7 +134,8 @@ export default function ViolationListPage() {
   async function loadViolations() {
     setLoading(true)
     try {
-      const response = await api.get('/api/violations')
+      const params = isSeller && user?.userID ? `?sellerUserID=${user.userID}` : ''
+      const response = await api.get(`/api/violations${params}`)
       setViolations(response.data)
       setError('')
     } catch (err) {
@@ -141,9 +181,7 @@ export default function ViolationListPage() {
     event.preventDefault()
     if (!editTarget || !editForm) return
 
-    if (editForm.violationDescription.length > DESCRIPTION_MAX) {
-      return
-    }
+    if (editForm.violationDescription.length > DESCRIPTION_MAX) return
 
     setSaving(true)
     try {
@@ -182,7 +220,54 @@ export default function ViolationListPage() {
     }
   }
 
+  function openRespondModal(violation) {
+    setRespondTarget(violation)
+    setRespondForm(buildRespondState(violation, user?.email))
+    setRespondErrors({})
+    setRespondSuccess(false)
+  }
+
+  function closeRespondModal() {
+    setRespondTarget(null)
+    setRespondForm(null)
+    setRespondErrors({})
+    setRespondSuccess(false)
+    setSubmitting(false)
+  }
+
+  async function handleRespondSubmit(event) {
+    event.preventDefault()
+    if (!respondTarget || !respondForm) return
+
+    const errors = validateRespondForm(respondForm)
+    if (Object.keys(errors).length > 0) {
+      setRespondErrors(errors)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await api.post(`/api/violations/${respondTarget.violationID}/responses`, {
+        sellerUserID: user.userID,
+        sellerEmail: respondForm.sellerEmail.trim(),
+        responseType: respondForm.responseType,
+        responseText: respondForm.responseText.trim(),
+        supportingURL: respondForm.supportingURL.trim(),
+      })
+      setRespondSuccess(true)
+      await loadViolations()
+    } catch (err) {
+      const detail = err.response?.data?.detail ?? 'Unable to submit response right now.'
+      showToast(detail, 'error')
+      setSubmitting(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
+
+  const tableHeadings = isSeller
+    ? ['Violation', 'Product', 'Marketplace Listing', 'Seller', 'Status', 'Response Status', 'Date', 'Action']
+    : ['Violation', 'Shortlist', 'Product', 'Marketplace Listing', 'Seller', 'Match', 'Status', 'Response Status', 'Date', 'Description', 'Actions']
 
   return (
     <div style={page}>
@@ -191,36 +276,38 @@ export default function ViolationListPage() {
           <p style={eyebrow}>Marketplace Enforcement</p>
           <h1 style={title}>Violation List</h1>
           <p style={subtitle}>
-            Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.
+            {isSeller
+              ? 'Review violations for your listings and submit your response for each one.'
+              : 'Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.'}
           </p>
         </div>
 
-        <div style={headerActions}>
-          <button
-            type="button"
-            onClick={handleSearch}
-            disabled={searching}
-            style={primaryButton}
-          >
-            <Search size={16} />
-            {searching ? 'Searching…' : 'Search for Violations'}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/violations/logging')}
-            style={secondaryButton}
-          >
-            <ShieldAlert size={16} />
-            Open Logging Workspace
-          </button>
-        </div>
+        {!isSeller && (
+          <div style={headerActions}>
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={searching}
+              style={primaryButton}
+            >
+              <Search size={16} />
+              {searching ? 'Searching…' : 'Search for Violations'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/violations/logging')}
+              style={secondaryButton}
+            >
+              <ShieldAlert size={16} />
+              Open Logging Workspace
+            </button>
+          </div>
+        )}
       </div>
 
       {recallFilter ? (
         <div style={filterBanner}>
-          <div>
-            Showing violation records for Recall #{recallFilter}.
-          </div>
+          <div>Showing violation records for Recall #{recallFilter}.</div>
           <button type="button" onClick={() => navigate('/violations')} style={filterDismissButton}>
             Clear Filter
           </button>
@@ -233,7 +320,8 @@ export default function ViolationListPage() {
         <SummaryCard label="Total Violations" value={stats.total} accent="#dbeafe" />
         <SummaryCard label="Unresolved" value={stats.unresolved} accent="#fee2e2" />
         <SummaryCard label="Resolved" value={stats.resolved} accent="#dcfce7" />
-        <SummaryCard label="Complete Documentation" value={stats.complete} accent="#fef3c7" />
+        <SummaryCard label="Seller Responded" value={stats.responded} accent="#fef3c7" />
+        {!isSeller && <SummaryCard label="Complete Documentation" value={stats.complete} accent="#f3e8ff" />}
       </div>
 
       <div style={panel}>
@@ -241,7 +329,9 @@ export default function ViolationListPage() {
           <div>
             <h2 style={panelTitle}>Current Marketplace Matches</h2>
             <p style={panelCopy}>
-              Imported matches are created from shortlist product-name searches against the eBay Browse API.
+              {isSeller
+                ? 'Click "Respond" to submit your response and supporting evidence for a violation.'
+                : 'Imported matches are created from shortlist product-name searches against the eBay Browse API.'}
             </p>
           </div>
         </div>
@@ -250,7 +340,7 @@ export default function ViolationListPage() {
           <table style={table}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc' }}>
-                {['Violation', 'Shortlist', 'Product', 'Marketplace Listing', 'Seller', 'Match', 'Status', 'Date', 'Description', 'Actions'].map((heading) => (
+                {tableHeadings.map((heading) => (
                   <th key={heading} style={th}>{heading}</th>
                 ))}
               </tr>
@@ -258,10 +348,13 @@ export default function ViolationListPage() {
             <tbody>
               {filteredViolations.length ? filteredViolations.map((violation) => {
                 const deleteDisabled = !isResolved(violation.status || violation.violationStatus)
+                const rsStatus = violation.responseStatus || 'No Response'
                 return (
                   <tr key={violation.violationID} style={{ borderBottom: '1px solid #eef2f7' }}>
                     <td style={tdStrong}>#{violation.violationID}</td>
-                    <td style={td}>{violation.shortListID ? `#${violation.shortListID}` : 'N/A'}</td>
+                    {!isSeller && (
+                      <td style={td}>{violation.shortListID ? `#${violation.shortListID}` : 'N/A'}</td>
+                    )}
                     <td style={td}>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{violation.productName || violation.recallProductName || 'Unknown product'}</div>
                       <div style={subtleMeta}>Recall #{violation.recallID ?? 'N/A'}</div>
@@ -285,45 +378,69 @@ export default function ViolationListPage() {
                       <div>{violation.seller || violation.sellerName || violation.sellerEmail || 'Unknown seller'}</div>
                       <div style={subtleMeta}>{violation.sellerID ? `Seller #${violation.sellerID}` : 'Seller ID pending'}</div>
                     </td>
-                    <td style={td}>
-                      <span style={{ ...pill, ...getMatchTone(violation.matchConfirmation ?? violation.isViolation) }}>
-                        {(violation.matchConfirmation ?? violation.isViolation) ? 'True' : 'False'}
-                      </span>
-                    </td>
+                    {!isSeller && (
+                      <td style={td}>
+                        <span style={{ ...pill, ...getMatchTone(violation.matchConfirmation ?? violation.isViolation) }}>
+                          {(violation.matchConfirmation ?? violation.isViolation) ? 'True' : 'False'}
+                        </span>
+                      </td>
+                    )}
                     <td style={td}>
                       <span style={{ ...pill, ...getStatusTone(violation.status || violation.violationStatus) }}>
                         {normalizeEditableStatus(violation.status || violation.violationStatus)}
                       </span>
                     </td>
-                    <td style={td}>{formatDate(violation.violationDate || violation.dateDetected)}</td>
                     <td style={td}>
-                      <div style={descriptionCell}>
-                        {violation.violationDescription || violation.message || 'No violation description added yet.'}
-                      </div>
+                      <span style={{ ...pill, ...getResponseStatusTone(rsStatus) }}>
+                        {rsStatus}
+                      </span>
                     </td>
+                    <td style={td}>{formatDate(violation.violationDate || violation.dateDetected)}</td>
+                    {!isSeller && (
+                      <td style={td}>
+                        <div style={descriptionCell}>
+                          {violation.violationDescription || violation.message || 'No violation description added yet.'}
+                        </div>
+                      </td>
+                    )}
                     <td style={td}>
                       <div style={actionRow}>
-                        <button type="button" onClick={() => openEditModal(violation)} style={editButton}>
-                          <Pencil size={13} />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(violation)}
-                          disabled={deleteDisabled}
-                          style={deleteDisabled ? disabledDeleteButton : deleteButton}
-                        >
-                          <Trash2 size={13} />
-                          Delete
-                        </button>
+                        {isSeller ? (
+                          <button
+                            type="button"
+                            onClick={() => openRespondModal(violation)}
+                            style={respondButton}
+                          >
+                            <MessageSquare size={13} />
+                            Respond
+                          </button>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => openEditModal(violation)} style={editButton}>
+                              <Pencil size={13} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(violation)}
+                              disabled={deleteDisabled}
+                              style={deleteDisabled ? disabledDeleteButton : deleteButton}
+                            >
+                              <Trash2 size={13} />
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
                 )
               }) : (
                 <tr>
-                  <td colSpan={10} style={emptyCell}>
-                    No violations are available yet. Run “Search for Violations” to import current shortlist matches from eBay.
+                  <td colSpan={tableHeadings.length} style={emptyCell}>
+                    {isSeller
+                      ? 'No violations are associated with your seller account.'
+                      : 'No violations are available yet. Run "Search for Violations" to import current shortlist matches from eBay.'}
                   </td>
                 </tr>
               )}
@@ -332,6 +449,7 @@ export default function ViolationListPage() {
         </div>
       </div>
 
+      {/* Search summary modal */}
       {searchSummary ? (
         <ModalCard>
           <h2 style={modalTitle}>Search Complete</h2>
@@ -342,6 +460,7 @@ export default function ViolationListPage() {
         </ModalCard>
       ) : null}
 
+      {/* Edit violation modal (staff only) */}
       {editTarget && editForm ? (
         <ModalCard>
           <form onSubmit={handleEditSubmit}>
@@ -406,6 +525,7 @@ export default function ViolationListPage() {
         </ModalCard>
       ) : null}
 
+      {/* Delete confirmation modal (staff only) */}
       {deleteTarget ? (
         <ModalCard>
           <h2 style={modalTitle}>Delete Violation?</h2>
@@ -420,6 +540,107 @@ export default function ViolationListPage() {
               {deleting ? 'Deleting…' : 'Delete'}
             </button>
           </div>
+        </ModalCard>
+      ) : null}
+
+      {/* Seller response modal */}
+      {respondTarget && respondForm ? (
+        <ModalCard>
+          {respondSuccess ? (
+            <>
+              <h2 style={modalTitle}>Response Submitted</h2>
+              <p style={modalCopy}>The response was submitted successfully!</p>
+              <button type="button" onClick={closeRespondModal} style={modalPrimaryButton}>
+                OK
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleRespondSubmit}>
+              <h2 style={modalTitle}>Seller Response</h2>
+              <p style={modalCopy}>Enter your response below along with a link to support your claim.</p>
+
+              <div style={detailGrid}>
+                <DetailRow label="Violation ID" value={`#${respondTarget.violationID}`} />
+                <DetailRow label="Product" value={respondTarget.productName || respondTarget.recallProductName || 'N/A'} />
+                <DetailRow label="Listing" value={respondTarget.listingTitle || 'Marketplace listing'} />
+                <DetailRow label="Marketplace" value={respondTarget.marketplaceSource || respondTarget.marketplaceName || 'eBay'} />
+                <DetailRow label="Detected" value={formatDate(respondTarget.violationDate || respondTarget.dateDetected)} />
+                <DetailRow label="Status" value={normalizeEditableStatus(respondTarget.status || respondTarget.violationStatus)} />
+              </div>
+
+              <label style={fieldLabel}>Seller Email:</label>
+              <input
+                type="text"
+                value={respondForm.sellerEmail}
+                onChange={(e) => {
+                  setRespondForm((f) => ({ ...f, sellerEmail: e.target.value }))
+                  setRespondErrors((err) => ({ ...err, sellerEmail: undefined }))
+                }}
+                style={{ ...input, borderColor: respondErrors.sellerEmail ? '#b91c1c' : '#cbd5e1' }}
+                placeholder="your@email.com"
+              />
+              {respondErrors.sellerEmail && <div style={helperError}>{respondErrors.sellerEmail}</div>}
+
+              <label style={fieldLabel}>Response Type:</label>
+              <select
+                value={respondForm.responseType}
+                onChange={(e) => setRespondForm((f) => ({ ...f, responseType: e.target.value }))}
+                style={input}
+              >
+                {RESPONSE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+
+              <label style={fieldLabel}>Response:</label>
+              <textarea
+                rows={6}
+                value={respondForm.responseText}
+                onChange={(e) => {
+                  setRespondForm((f) => ({ ...f, responseText: e.target.value }))
+                  setRespondErrors((err) => ({ ...err, responseText: undefined }))
+                }}
+                style={{
+                  ...input,
+                  resize: 'vertical',
+                  paddingTop: 14,
+                  borderColor: respondErrors.responseText ? '#b91c1c' : '#cbd5e1',
+                }}
+                placeholder="Describe your response to this violation…"
+              />
+              <div style={respondForm.responseText.length > RESPONSE_TEXT_MAX ? helperError : helperCopy}>
+                {respondErrors.responseText
+                  ? respondErrors.responseText
+                  : `${respondForm.responseText.length} / ${RESPONSE_TEXT_MAX} characters`}
+              </div>
+
+              <label style={fieldLabel}>Supporting URL:</label>
+              <input
+                type="text"
+                value={respondForm.supportingURL}
+                onChange={(e) => {
+                  setRespondForm((f) => ({ ...f, supportingURL: e.target.value }))
+                  setRespondErrors((err) => ({ ...err, supportingURL: undefined }))
+                }}
+                style={{ ...input, borderColor: respondErrors.supportingURL ? '#b91c1c' : '#cbd5e1' }}
+                placeholder="https://docs.example.com/evidence"
+              />
+              {respondErrors.supportingURL && <div style={helperError}>{respondErrors.supportingURL}</div>}
+
+              <div style={modalActions}>
+                <button type="button" onClick={closeRespondModal} style={modalSecondaryButton}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={submitting ? modalDisabledButton : modalPrimaryButton}
+                >
+                  {submitting ? 'Submitting…' : 'Submit'}
+                </button>
+              </div>
+            </form>
+          )}
         </ModalCard>
       ) : null}
     </div>
@@ -454,10 +675,7 @@ function ModalCard({ children }) {
   )
 }
 
-const page = {
-  padding: '32px',
-  maxWidth: 1420,
-}
+const page = { padding: '32px', maxWidth: 1420 }
 
 const header = {
   display: 'flex',
@@ -477,12 +695,7 @@ const eyebrow = {
   textTransform: 'uppercase',
 }
 
-const title = {
-  margin: '10px 0 0',
-  fontSize: 40,
-  lineHeight: 1.02,
-  color: '#0f172a',
-}
+const title = { margin: '10px 0 0', fontSize: 40, lineHeight: 1.02, color: '#0f172a' }
 
 const subtitle = {
   margin: '12px 0 0',
@@ -492,11 +705,7 @@ const subtitle = {
   lineHeight: 1.6,
 }
 
-const headerActions = {
-  display: 'flex',
-  gap: 12,
-  flexWrap: 'wrap',
-}
+const headerActions = { display: 'flex', gap: 12, flexWrap: 'wrap' }
 
 const primaryButton = {
   display: 'inline-flex',
@@ -593,27 +802,13 @@ const panelHeader = {
   marginBottom: 18,
 }
 
-const panelTitle = {
-  margin: 0,
-  fontSize: 22,
-  color: '#0f172a',
-}
+const panelTitle = { margin: 0, fontSize: 22, color: '#0f172a' }
 
-const panelCopy = {
-  margin: '8px 0 0',
-  color: '#64748b',
-  fontSize: 14,
-}
+const panelCopy = { margin: '8px 0 0', color: '#64748b', fontSize: 14 }
 
-const tableWrap = {
-  overflowX: 'auto',
-}
+const tableWrap = { overflowX: 'auto' }
 
-const table = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  minWidth: 1280,
-}
+const table = { width: '100%', borderCollapse: 'collapse', minWidth: 900 }
 
 const th = {
   padding: '12px 14px',
@@ -625,24 +820,11 @@ const th = {
   letterSpacing: '0.08em',
 }
 
-const td = {
-  padding: '16px 14px',
-  fontSize: 13,
-  color: '#475569',
-  verticalAlign: 'top',
-}
+const td = { padding: '16px 14px', fontSize: 13, color: '#475569', verticalAlign: 'top' }
 
-const tdStrong = {
-  ...td,
-  fontWeight: 700,
-  color: '#0f172a',
-}
+const tdStrong = { ...td, fontWeight: 700, color: '#0f172a' }
 
-const subtleMeta = {
-  marginTop: 6,
-  color: '#94a3b8',
-  fontSize: 12,
-}
+const subtleMeta = { marginTop: 6, color: '#94a3b8', fontSize: 12 }
 
 const externalLink = {
   display: 'inline-flex',
@@ -664,17 +846,9 @@ const pill = {
   fontWeight: 700,
 }
 
-const descriptionCell = {
-  maxWidth: 260,
-  lineHeight: 1.6,
-  whiteSpace: 'pre-wrap',
-}
+const descriptionCell = { maxWidth: 260, lineHeight: 1.6, whiteSpace: 'pre-wrap' }
 
-const actionRow = {
-  display: 'flex',
-  gap: 8,
-  flexWrap: 'wrap',
-}
+const actionRow = { display: 'flex', gap: 8, flexWrap: 'wrap' }
 
 const editButton = {
   display: 'inline-flex',
@@ -685,6 +859,20 @@ const editButton = {
   border: '1px solid #dbe4f0',
   backgroundColor: '#ffffff',
   color: '#0f172a',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+}
+
+const respondButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '7px 10px',
+  borderRadius: 8,
+  border: 'none',
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#ffffff',
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
@@ -704,11 +892,7 @@ const deleteButton = {
   cursor: 'pointer',
 }
 
-const disabledDeleteButton = {
-  ...deleteButton,
-  opacity: 0.45,
-  cursor: 'not-allowed',
-}
+const disabledDeleteButton = { ...deleteButton, opacity: 0.45, cursor: 'not-allowed' }
 
 const emptyCell = {
   padding: '40px 16px',
@@ -739,18 +923,9 @@ const modal = {
   boxShadow: '0 30px 70px rgba(15, 23, 42, 0.24)',
 }
 
-const modalTitle = {
-  margin: 0,
-  fontSize: 26,
-  color: '#0f172a',
-}
+const modalTitle = { margin: 0, fontSize: 26, color: '#0f172a' }
 
-const modalCopy = {
-  margin: '12px 0 0',
-  color: '#475569',
-  fontSize: 15,
-  lineHeight: 1.6,
-}
+const modalCopy = { margin: '12px 0 0', color: '#475569', fontSize: 15, lineHeight: 1.6 }
 
 const detailGrid = {
   display: 'grid',
@@ -771,12 +946,7 @@ const detailLabel = {
   letterSpacing: '0.08em',
 }
 
-const detailValue = {
-  marginTop: 6,
-  color: '#0f172a',
-  fontSize: 14,
-  lineHeight: 1.5,
-}
+const detailValue = { marginTop: 6, color: '#0f172a', fontSize: 14, lineHeight: 1.5 }
 
 const fieldLabel = {
   display: 'block',
@@ -798,18 +968,9 @@ const input = {
   boxSizing: 'border-box',
 }
 
-const helperCopy = {
-  marginTop: 8,
-  color: '#64748b',
-  fontSize: 12,
-}
+const helperCopy = { marginTop: 8, color: '#64748b', fontSize: 12 }
 
-const helperError = {
-  marginTop: 8,
-  color: '#b91c1c',
-  fontSize: 12,
-  fontWeight: 600,
-}
+const helperError = { marginTop: 8, color: '#b91c1c', fontSize: 12, fontWeight: 600 }
 
 const modalActions = {
   display: 'flex',
@@ -847,19 +1008,8 @@ const modalSecondaryButton = {
   cursor: 'pointer',
 }
 
-const modalDeleteButton = {
-  ...modalPrimaryButton,
-  background: '#b91c1c',
-}
+const modalDeleteButton = { ...modalPrimaryButton, background: '#b91c1c' }
 
-const modalDisabledButton = {
-  ...modalPrimaryButton,
-  opacity: 0.55,
-  cursor: 'not-allowed',
-}
+const modalDisabledButton = { ...modalPrimaryButton, opacity: 0.55, cursor: 'not-allowed' }
 
-const modalDisabledDeleteButton = {
-  ...modalDeleteButton,
-  opacity: 0.55,
-  cursor: 'not-allowed',
-}
+const modalDisabledDeleteButton = { ...modalDeleteButton, opacity: 0.55, cursor: 'not-allowed' }

@@ -87,6 +87,8 @@ export default function AnalyticsPage() {
     documentationCompletion: { complete: 0, incomplete: 0, percentageComplete: 0 },
     resolutionRate: { resolved: 0, unresolved: 0, percentageResolved: 0 },
   })
+  const [sellerResponseRate, setSellerResponseRate] = useState(null)
+  const [sellerResponseDoc, setSellerResponseDoc]   = useState(null)
   const [loading, setLoading]                = useState(true)
   const [error, setError]                    = useState('')
 
@@ -101,6 +103,8 @@ export default function AnalyticsPage() {
           dateRes,
           catRes,
           violationRes,
+          srRateRes,
+          srDocRes,
         ] = await Promise.all([
           api.get('/api/shortlist/analytics/okr'),
           api.get('/api/analytics/incomplete-recalls'),
@@ -108,6 +112,8 @@ export default function AnalyticsPage() {
           api.get('/api/analytics/recalls-by-date'),
           api.get('/api/analytics/category-week'),
           api.get('/api/analytics/violations-overview'),
+          api.get('/api/analytics/seller-response-rate'),
+          api.get('/api/analytics/seller-response-documentation'),
         ])
 
         setOkr(okrRes.data)
@@ -116,6 +122,8 @@ export default function AnalyticsPage() {
         setRecallsByDate(dateRes.data)
         setCategoryWeek(catRes.data)
         setViolationOverview(violationRes.data)
+        setSellerResponseRate(srRateRes.data)
+        setSellerResponseDoc(srDocRes.data)
         setError('')
       } catch {
         setError('Unable to load analytics right now. Please refresh in a moment.')
@@ -252,6 +260,121 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Sprint 3 OKR 3.1 ── */}
+      <SectionHeading>OKR 3.1 — Seller Response Rate within 14 Days</SectionHeading>
+      {sellerResponseRate ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <h3 style={cardTitle}>Current vs Target</h3>
+              <StatusBadge current={sellerResponseRate.respondedWithin14Days} target={sellerResponseRate.target} />
+            </div>
+            <p style={cardDesc}>
+              Increase violations receiving a seller response within 14 days from baseline of 0 to target of 5.
+            </p>
+            <OKRBarChart
+              baseline={sellerResponseRate.baseline}
+              current={sellerResponseRate.respondedWithin14Days}
+              target={sellerResponseRate.target}
+            />
+            <ProgressBar current={sellerResponseRate.respondedWithin14Days} target={sellerResponseRate.target} />
+          </div>
+
+          <div style={card}>
+            <h3 style={{ ...cardTitle, marginBottom: 8 }}>Response Rate Breakdown</h3>
+            <p style={cardDesc}>Percentage of total violations with a seller response within the 14-day SLA window.</p>
+            <ResponsiveContainer width="100%" height={230}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Responded ≤14 Days', value: sellerResponseRate.respondedWithin14Days, color: '#16A34A' },
+                    { name: 'No Response / Late', value: Math.max(0, sellerResponseRate.totalViolations - sellerResponseRate.respondedWithin14Days), color: '#DC2626' },
+                  ].filter((d) => d.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={88}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {[{ color: '#16A34A' }, { color: '#DC2626' }].map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={metricSummary}>
+              <strong>{sellerResponseRate.responseRatePercentage}% response rate</strong>
+              <span>{sellerResponseRate.respondedWithin14Days} responded within 14 days</span>
+              <span>{sellerResponseRate.totalViolations} total violations</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Sprint 3 OKR 3.2 ── */}
+      <SectionHeading>OKR 3.2 — Percentage of Fully Documented Seller Responses</SectionHeading>
+      {sellerResponseDoc ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <h3 style={cardTitle}>Complete vs Target</h3>
+              <StatusBadge current={sellerResponseDoc.completeResponses} target={sellerResponseDoc.target} />
+            </div>
+            <p style={cardDesc}>
+              Increase fully documented seller responses (response text, supporting URL, response date) from 0 to 5.
+            </p>
+            <OKRBarChart
+              baseline={sellerResponseDoc.baseline}
+              current={sellerResponseDoc.completeResponses}
+              target={sellerResponseDoc.target}
+            />
+            <ProgressBar current={sellerResponseDoc.completeResponses} target={sellerResponseDoc.target} />
+          </div>
+
+          <div style={card}>
+            <h3 style={{ ...cardTitle, marginBottom: 8 }}>Response Documentation Completeness</h3>
+            <p style={cardDesc}>Percentage of seller responses that include all required evidence fields.</p>
+            {sellerResponseDoc.totalResponses === 0 ? (
+              <p style={emptyMsg}>No seller responses submitted yet.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={230}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Complete', value: sellerResponseDoc.completeResponses, color: '#16A34A' },
+                      { name: 'Incomplete', value: sellerResponseDoc.incompleteResponses, color: '#DC2626' },
+                    ].filter((d) => d.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={88}
+                    paddingAngle={3}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {[{ color: '#16A34A' }, { color: '#DC2626' }].map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+            <div style={metricSummary}>
+              <strong>{sellerResponseDoc.completenessPercentage}% complete</strong>
+              <span>{sellerResponseDoc.completeResponses} fully documented</span>
+              <span>{sellerResponseDoc.incompleteResponses} incomplete</span>
+              <span>{sellerResponseDoc.totalResponses} total responses</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── OKR 1.1 ── */}
       <SectionHeading>OKR 1.1 — High Priority Recalls Shortlisted per Quarter</SectionHeading>

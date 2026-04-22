@@ -5,8 +5,10 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Recall, ShortList, Violation
+from models import Message, Recall, SellerResponse, ShortList, Violation
 from schemas import (
+    SellerResponseDocumentationMetrics,
+    SellerResponseRateMetrics,
     ViolationAnalyticsOverview,
     ViolationDocumentationMetrics,
     ViolationResolutionMetrics,
@@ -41,6 +43,17 @@ def _violation_documentation_complete(violation: Violation) -> bool:
         violation.violationStatus,
     ]
     return all(_is_present(value) for value in required_values)
+
+
+def _seller_response_fully_documented(response: SellerResponse) -> bool:
+    msg = response.message
+    return bool(
+        _is_present(response.responseType)
+        and _is_present(response.evidenceURL)
+        and response.dateResponded is not None
+        and msg is not None
+        and _is_present(msg.messagecontent)
+    )
 
 
 @router.get("/incomplete-recalls")
@@ -193,4 +206,57 @@ def violations_overview(db: Session = Depends(get_db)):
         newViolationsTotal=running_total,
         documentationCompletion=documentation_completion,
         resolutionRate=resolution_rate,
+    )
+
+
+# ── Sprint 3 OKR Endpoints ────────────────────────────────────────────────────
+
+@router.get("/seller-response-rate", response_model=SellerResponseRateMetrics)
+def seller_response_rate(db: Session = Depends(get_db)):
+    """OKR 3.1: Count violations that received a seller response within 14 days of detection."""
+    total_violations = db.query(func.count(Violation.violationID)).scalar() or 0
+
+    # Violations where at least one response was submitted within 14 days
+    responded_within_14 = (
+        db.query(func.count(func.distinct(SellerResponse.violationID)))
+        .join(Violation, SellerResponse.violationID == Violation.violationID)
+        .filter(
+            Violation.dateDetected.isnot(None),
+            SellerResponse.dateResponded <= func.cast(Violation.dateDetected, type_=type(date.today())) + text("INTERVAL '14 days'"),
+        )
+        .scalar()
+    ) or 0
+
+    rate = round((responded_within_14 / total_violations) * 100, 1) if total_violations else 0.0
+
+    return SellerResponseRateMetrics(
+        respondedWithin14Days=responded_within_14,
+        totalViolations=total_violations,
+        responseRatePercentage=rate,
+        baseline=0,
+        target=5,
+    )
+
+
+@router.get("/seller-response-documentation", response_model=SellerResponseDocumentationMetrics)
+def seller_response_documentation(db: Session = Depends(get_db)):
+    """OKR 3.2: Percentage of seller responses that have all required fields completed."""
+    responses = (
+        db.query(SellerResponse)
+        .options(joinedload(SellerResponse.message))
+        .all()
+    )
+
+    total = len(responses)
+    complete = sum(1 for r in responses if _seller_response_fully_documented(r))
+    incomplete = max(total - complete, 0)
+    pct = round((complete / total) * 100, 1) if total else 0.0
+
+    return SellerResponseDocumentationMetrics(
+        completeResponses=complete,
+        incompleteResponses=incomplete,
+        totalResponses=total,
+        completenessPercentage=pct,
+        baseline=0,
+        target=5,
     )

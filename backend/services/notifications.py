@@ -33,7 +33,7 @@ def send_violation_notification(
         )
 
     frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
-    notice_url = f"{frontend_url}/seller/notices/{violation_id}" if frontend_url else ""
+    notice_url = f"{frontend_url}/violations" if frontend_url else ""
 
     email = EmailMessage()
     email["Subject"] = f"CPSC violation notice: {recall_name}"
@@ -50,11 +50,55 @@ def send_violation_notification(
             f"Violation summary:\n{message}\n\n"
             f"Evidence URL:\n{evidence_url}\n\n"
             f"Investigator notes:\n{investigator_notes}\n\n"
-            f"Seller portal notice:\n{notice_url or 'Configure FRONTEND_URL to include a direct portal link.'}\n\n"
-            "Please review the listing immediately and take corrective action.\n"
+            f"Please log in to the seller portal and submit your response:\n{notice_url}\n\n"
+            "You have 14 days to respond before a reminder is sent.\n"
         )
     )
 
+    return _send_email(email, recipient_email)
+
+
+def send_sla_reminder(
+    recipient_email: str,
+    recipient_name: str,
+    violation_id: int,
+    recall_name: str,
+    listing_title: str,
+    days_overdue: int,
+) -> NotificationResult:
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_from = os.getenv("SMTP_FROM", "").strip()
+
+    if not smtp_host or not smtp_from:
+        return NotificationResult(
+            status="skipped",
+            detail="SMTP not configured — reminder not sent.",
+        )
+
+    frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+    portal_url = f"{frontend_url}/violations" if frontend_url else ""
+
+    email = EmailMessage()
+    email["Subject"] = f"REMINDER: Unresolved CPSC violation — {recall_name}"
+    email["From"] = smtp_from
+    email["To"] = recipient_email
+    email.set_content(
+        (
+            f"Hello {recipient_name or 'Seller'},\n\n"
+            f"This is a reminder that Violation #{violation_id} for the recalled product "
+            f"\"{recall_name}\" (listing: {listing_title}) has been open for {days_overdue} days "
+            f"without a seller response.\n\n"
+            f"Please log in to the seller portal and submit your response as soon as possible:\n"
+            f"{portal_url}\n\n"
+            "Failure to respond may result in further enforcement action.\n"
+        )
+    )
+
+    return _send_email(email, recipient_email)
+
+
+def _send_email(email: EmailMessage, recipient_email: str) -> NotificationResult:
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_username = os.getenv("SMTP_USERNAME", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
@@ -72,10 +116,10 @@ def send_violation_notification(
     except Exception as exc:
         return NotificationResult(
             status="failed",
-            detail=f"Violation logged, but email delivery failed: {exc}",
+            detail=f"Email delivery failed: {exc}",
         )
 
     return NotificationResult(
         status="sent",
-        detail=f"Seller notification sent to {recipient_email}.",
+        detail=f"Email sent to {recipient_email}.",
     )

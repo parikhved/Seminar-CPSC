@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -8,13 +8,17 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Adjudication, ProductListing, Recall, SellerResponse, ShortList, User, Violation
+from models import Adjudication, Message, ProductListing, Recall, SellerResponse, ShortList, User, Violation
 from schemas import (
     DetectedListingOut,
     EbayScanRequest,
     EbayScanResponse,
+    RESPONSE_TEXT_MAX,
+    RESPONSE_TYPE_OPTIONS,
+    SUPPORTING_URL_MAX,
     RecallSummary,
     SellerResponseCreate,
+    SellerResponseListItem,
     SellerResponseOut,
     SellerViolationNoticeOut,
     ViolationCreate,
@@ -31,6 +35,7 @@ from services import (
     build_recall_query,
     score_listing_match,
     send_violation_notification,
+    send_sla_reminder,
 )
 
 router = APIRouter(prefix="/api/violations", tags=["Violations"])
@@ -75,6 +80,15 @@ def _is_valid_email(value: str) -> bool:
         return False
     local_part, _, domain = value.partition("@")
     return bool(local_part and "." in domain)
+
+
+def _is_valid_supporting_url(value: str) -> bool:
+    cleaned = value.strip()
+    return (
+        cleaned.startswith("https://")
+        and " " not in cleaned
+        and len(cleaned) <= SUPPORTING_URL_MAX
+    )
 
 
 def _serialize_price(value: Optional[Decimal]) -> Optional[float]:
@@ -207,6 +221,10 @@ def _upsert_listing_from_marketplace_result(
     return listing
 
 
+def _response_status(violation: Violation) -> str:
+    return "Responded" if violation.seller_responses else "No Response"
+
+
 def _build_violation_out(violation: Violation) -> ViolationOut:
     investigator = violation.investigator
     recipient = violation.recipient
@@ -229,6 +247,7 @@ def _build_violation_out(violation: Violation) -> ViolationOut:
         violationID=violation.violationID,
         isViolation=bool(violation.isViolation),
         violationStatus=violation.violationStatus,
+        responseStatus=_response_status(violation),
         message=violation.message,
         evidenceURL=violation.evidenceURL,
         dateDetected=violation.dateDetected,
@@ -297,9 +316,10 @@ def _build_seller_notice_out(violation: Violation, seller_user_id: int) -> Selle
     recall = violation.recall
     listing = violation.listing
     investigator = violation.investigator
-    existing_response = next(
-        (response for response in violation.seller_responses if response.sellerUserID == seller_user_id),
-        None,
+    latest_response = (
+        sorted(violation.seller_responses, key=lambda r: r.dateResponded, reverse=True)[0]
+        if violation.seller_responses
+        else None
     )
 
     investigator_name = None
@@ -309,6 +329,7 @@ def _build_seller_notice_out(violation: Violation, seller_user_id: int) -> Selle
     return SellerViolationNoticeOut(
         violationID=violation.violationID,
         violationStatus=violation.violationStatus,
+        responseStatus=_response_status(violation),
         message=violation.message,
         evidenceURL=violation.evidenceURL,
         dateDetected=violation.dateDetected,
@@ -321,28 +342,79 @@ def _build_seller_notice_out(violation: Violation, seller_user_id: int) -> Selle
         marketplaceName=listing.marketplaceName if listing else None,
         sellerEmail=listing.sellerEmail if listing else None,
         investigatorName=investigator_name,
-        responseID=existing_response.responseID if existing_response else None,
-        sellerResponse=existing_response.response if existing_response else None,
-        responseEvidenceURL=existing_response.evidenceURL if existing_response else None,
-        dateResponded=existing_response.dateResponded if existing_response else None,
+        responseID=latest_response.responseID if latest_response else None,
+        sellerResponse=latest_response.message.messagecontent if (latest_response and latest_response.message) else None,
+        responseEvidenceURL=latest_response.evidenceURL if latest_response else None,
+        dateResponded=latest_response.dateResponded if latest_response else None,
+    )
+
+
+def _build_response_list_item(r: SellerResponse) -> SellerResponseListItem:
+    msg = r.message
+    violation = r.violation
+    listing = violation.listing if violation else None
+    recall = violation.recall if violation else None
+    return SellerResponseListItem(
+        responseID=r.responseID,
+        violationID=r.violationID,
+        responseType=r.responseType,
+        evidenceURL=r.evidenceURL,
+        dateResponded=r.dateResponded,
+        sellerUserID=r.sellerUserID,
+        sellerEmail=msg.senttoemailaddress if msg else None,
+        responseText=msg.messagecontent if msg else None,
+        violationProductName=recall.productName if recall else None,
+        violationListingTitle=listing.listingTitle if listing else None,
+        violationDateDetected=violation.dateDetected if violation else None,
     )
 
 
 @router.get("", response_model=list[ViolationOut])
-def list_violations(db: Session = Depends(get_db)):
+def list_violations(sellerUserID: Optional[int] = None, db: Session = Depends(get_db)):
     try:
-        violations = (
+        query = (
             db.query(Violation)
             .options(
                 joinedload(Violation.investigator),
                 joinedload(Violation.recipient),
                 joinedload(Violation.listing),
                 joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+                joinedload(Violation.seller_responses),
             )
-            .order_by(Violation.dateDetected.desc(), Violation.violationID.desc())
+        )
+
+        if sellerUserID is not None:
+            query = (
+                query
+                .join(ProductListing, Violation.listingID == ProductListing.listingID)
+                .filter(
+                    or_(
+                        Violation.receivedByID == sellerUserID,
+                        ProductListing.sellerUserID == sellerUserID,
+                    )
+                )
+            )
+
+        violations = query.order_by(Violation.dateDetected.desc(), Violation.violationID.desc()).all()
+        return [_build_violation_out(violation) for violation in violations]
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.get("/responses", response_model=list[SellerResponseListItem])
+def list_seller_responses(db: Session = Depends(get_db)):
+    try:
+        responses = (
+            db.query(SellerResponse)
+            .options(
+                joinedload(SellerResponse.message),
+                joinedload(SellerResponse.violation).joinedload(Violation.recall),
+                joinedload(SellerResponse.violation).joinedload(Violation.listing),
+            )
+            .order_by(SellerResponse.dateResponded.desc(), SellerResponse.responseID.desc())
             .all()
         )
-        return [_build_violation_out(violation) for violation in violations]
+        return [_build_response_list_item(r) for r in responses]
     except (ProgrammingError, OperationalError) as exc:
         _raise_schema_error(exc, db)
 
@@ -669,6 +741,7 @@ def update_violation(
                 joinedload(Violation.recipient),
                 joinedload(Violation.listing),
                 joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+                joinedload(Violation.seller_responses),
             )
             .filter(Violation.violationID == violation_id)
             .first()
@@ -710,7 +783,12 @@ def delete_violation(violation_id: int, db: Session = Depends(get_db)):
 
         listing_id = violation.listingID
 
+        # Delete linked messages first, then seller responses, then adjudications
+        linked_responses = db.query(SellerResponse).filter(SellerResponse.violationID == violation.violationID).all()
+        for resp in linked_responses:
+            db.query(Message).filter(Message.messageid == resp.messageid).delete()
         db.query(SellerResponse).filter(SellerResponse.violationID == violation.violationID).delete()
+        db.query(Message).filter(Message.violationID == violation.violationID).delete()
         db.query(Adjudication).filter(Adjudication.violationID == violation.violationID).delete()
         db.delete(violation)
         db.flush()
@@ -745,6 +823,12 @@ def list_seller_notices(seller_user_id: int, db: Session = Depends(get_db)):
                     ProductListing.sellerUserID == seller_user_id,
                 )
             )
+            .options(
+                joinedload(Violation.recall),
+                joinedload(Violation.listing),
+                joinedload(Violation.investigator),
+                joinedload(Violation.seller_responses).joinedload(SellerResponse.message),
+            )
             .order_by(Violation.dateDetected.desc(), Violation.violationID.desc())
             .all()
         )
@@ -771,41 +855,169 @@ def submit_seller_response(
 ):
     try:
         _get_seller_user(db, payload.sellerUserID)
-        violation = _get_notice_for_seller(db, payload.sellerUserID, violation_id)
 
-        if not _clean_text(payload.response) or not _clean_text(payload.evidenceURL):
+        # Validate seller email format
+        seller_email = _clean_text(payload.sellerEmail)
+        if not seller_email or not _is_valid_email(seller_email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Response details and evidence are required before submitting a seller response.",
+                detail="Please enter a valid email address",
             )
 
-        existing_response = (
-            db.query(SellerResponse)
+        # Validate seller email exists in the seller database
+        seller_by_email = _find_seller_user_by_email(db, seller_email)
+        if not seller_by_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please enter a valid email address",
+            )
+
+        # Validate response type
+        if payload.responseType not in RESPONSE_TYPE_OPTIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Response type must be one of: {', '.join(RESPONSE_TYPE_OPTIONS)}",
+            )
+
+        # Validate response text
+        response_text = _clean_text(payload.responseText)
+        if not response_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Response cannot be empty.",
+            )
+        if len(payload.responseText) > RESPONSE_TEXT_MAX:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Response exceeds {RESPONSE_TEXT_MAX} character limit",
+            )
+
+        # Validate supporting URL
+        supporting_url = _clean_text(payload.supportingURL)
+        if not supporting_url or not _is_valid_supporting_url(supporting_url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please enter a proper URL link",
+            )
+
+        # Find the violation (accessible to this seller)
+        violation = (
+            db.query(Violation)
+            .join(ProductListing, Violation.listingID == ProductListing.listingID)
             .filter(
-                SellerResponse.violationID == violation.violationID,
-                SellerResponse.sellerUserID == payload.sellerUserID,
+                Violation.violationID == violation_id,
+                or_(
+                    Violation.receivedByID == payload.sellerUserID,
+                    ProductListing.sellerUserID == payload.sellerUserID,
+                ),
             )
             .first()
         )
-
-        if existing_response:
-            existing_response.response = _clean_text(payload.response)
-            existing_response.evidenceURL = _clean_text(payload.evidenceURL)
-            existing_response.dateResponded = date.today()
-            seller_response = existing_response
-        else:
-            seller_response = SellerResponse(
-                response=_clean_text(payload.response),
-                evidenceURL=_clean_text(payload.evidenceURL),
-                dateResponded=date.today(),
-                violationID=violation.violationID,
-                sellerUserID=payload.sellerUserID,
+        if not violation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Violation not found for this seller.",
             )
-            db.add(seller_response)
 
+        # Create the message record (stores the seller's response text + email)
+        msg = Message(
+            senttoemailaddress=seller_email.lower(),
+            responsetype=payload.responseType,
+            messagecontent=response_text[:RESPONSE_TEXT_MAX],
+            message_datetime=datetime.now(),
+            violationID=violation.violationID,
+            userID=payload.sellerUserID,
+        )
+        db.add(msg)
+        db.flush()
+
+        # Create the seller response record
+        seller_response = SellerResponse(
+            responseType=payload.responseType,
+            evidenceURL=supporting_url,
+            dateResponded=date.today(),
+            violationID=violation.violationID,
+            sellerUserID=payload.sellerUserID,
+            messageid=msg.messageid,
+        )
+        db.add(seller_response)
+        db.flush()
+
+        # Back-link message to the response
+        msg.responseid = seller_response.responseID
+
+        # Mark violation as having a seller response
         violation.violationStatus = "Seller Responded"
         db.commit()
         db.refresh(seller_response)
-        return SellerResponseOut.model_validate(seller_response)
+
+        return SellerResponseOut(
+            responseID=seller_response.responseID,
+            responseType=seller_response.responseType,
+            evidenceURL=seller_response.evidenceURL,
+            dateResponded=seller_response.dateResponded,
+            violationID=seller_response.violationID,
+            sellerUserID=seller_response.sellerUserID,
+            messageid=seller_response.messageid,
+            responseText=msg.messagecontent,
+            sellerEmail=msg.senttoemailaddress,
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.post("/remind-overdue")
+def send_overdue_reminders(db: Session = Depends(get_db)):
+    """Send SLA reminder emails for violations with no seller response after 14 days."""
+    try:
+        cutoff = date.today() - timedelta(days=14)
+
+        overdue_violations = (
+            db.query(Violation)
+            .outerjoin(SellerResponse, SellerResponse.violationID == Violation.violationID)
+            .filter(
+                Violation.dateDetected.isnot(None),
+                Violation.dateDetected <= cutoff,
+                SellerResponse.responseID.is_(None),
+            )
+            .options(
+                joinedload(Violation.listing),
+                joinedload(Violation.recall),
+            )
+            .all()
+        )
+
+        sent_count = 0
+        skipped_count = 0
+
+        for violation in overdue_violations:
+            listing = violation.listing
+            recall = violation.recall
+            seller_email = listing.sellerEmail if listing else None
+            seller_name = listing.sellerName if listing else "Seller"
+
+            if not seller_email:
+                skipped_count += 1
+                continue
+
+            result = send_sla_reminder(
+                recipient_email=seller_email,
+                recipient_name=seller_name or "Seller",
+                violation_id=violation.violationID,
+                recall_name=recall.productName if recall else "Unknown product",
+                listing_title=listing.listingTitle if listing else "Marketplace listing",
+                days_overdue=(date.today() - violation.dateDetected).days,
+            )
+
+            if result.status in {"sent", "skipped"}:
+                sent_count += 1
+            else:
+                skipped_count += 1
+
+        return {
+            "totalOverdue": len(overdue_violations),
+            "remindersSent": sent_count,
+            "skipped": skipped_count,
+        }
     except (ProgrammingError, OperationalError) as exc:
         _raise_schema_error(exc, db)
