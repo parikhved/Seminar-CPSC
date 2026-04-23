@@ -140,6 +140,7 @@ EDITABLE_STATUSES = {
     "unresolved": "Unresolved",
     "under review": "Under Review",
     "pending seller response": "Pending Seller Response",
+    "seller responded": "Seller Responded",
     "resolved": "Resolved",
 }
 
@@ -849,11 +850,15 @@ def delete_violation(violation_id: int, db: Session = Depends(get_db)):
 
         listing_id = violation.listingID
 
-        # Delete linked messages first, then seller responses, then adjudications
+        # Collect message IDs before deleting anything
         linked_responses = db.query(SellerResponse).filter(SellerResponse.violationID == violation.violationID).all()
-        for resp in linked_responses:
-            db.query(Message).filter(Message.messageid == resp.messageid).delete()
+        message_ids = [resp.messageid for resp in linked_responses if resp.messageid is not None]
+
+        # Delete seller responses first (they hold the FK to message)
         db.query(SellerResponse).filter(SellerResponse.violationID == violation.violationID).delete()
+        # Now safe to delete messages
+        for mid in message_ids:
+            db.query(Message).filter(Message.messageid == mid).delete()
         db.query(Message).filter(Message.violationID == violation.violationID).delete()
         db.query(Adjudication).filter(Adjudication.violationID == violation.violationID).delete()
         db.delete(violation)

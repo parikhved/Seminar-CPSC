@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext'
 const DESCRIPTION_MAX = 500
 const RESPONSE_TEXT_MAX = 500
 const SUPPORTING_URL_MAX = 2048
-const STATUS_OPTIONS = ['Unresolved', 'Under Review', 'Pending Seller Response', 'Resolved']
+const STATUS_OPTIONS = ['Unresolved', 'Under Review', 'Pending Seller Response', 'Seller Responded', 'Resolved']
 const MATCH_OPTIONS = [
   { label: 'True', value: 'true' },
   { label: 'False', value: 'false' },
@@ -39,11 +39,20 @@ function isResolved(status) {
 function normalizeEditableStatus(status) {
   const s = String(status || '').trim()
   if (STATUS_OPTIONS.includes(s)) return s
-  return isResolved(s) ? 'Resolved' : 'Unresolved'
+  const lower = s.toLowerCase()
+  if (lower === 'resolved') return 'Resolved'
+  if (lower === 'seller responded') return 'Seller Responded'
+  if (lower === 'under review') return 'Under Review'
+  if (lower === 'pending seller response') return 'Pending Seller Response'
+  return 'Unresolved'
 }
 
 function getStatusTone(status) {
-  if (isResolved(status)) return { background: '#dcfce7', color: '#166534' }
+  const s = String(status || '').trim().toLowerCase()
+  if (s === 'resolved') return { background: '#dcfce7', color: '#166534' }
+  if (s === 'seller responded') return { background: '#dbeafe', color: '#1d4ed8' }
+  if (s === 'under review') return { background: '#f3e8ff', color: '#6b21a8' }
+  if (s === 'pending seller response') return { background: '#fef3c7', color: '#92400e' }
   return { background: '#fee2e2', color: '#b91c1c' }
 }
 
@@ -123,7 +132,6 @@ export default function ViolationListPage() {
   const [respondForm, setRespondForm] = useState(null)
   const [respondErrors, setRespondErrors] = useState({})
   const [respondSuccess, setRespondSuccess] = useState(false)
-  const [viewAllViolations, setViewAllViolations] = useState(false)
 
   const recallFilter = searchParams.get('recallId')
   const filteredViolations = recallFilter
@@ -133,17 +141,12 @@ export default function ViolationListPage() {
 
   useEffect(() => {
     loadViolations()
-  }, [viewAllViolations])
+  }, [])
 
   async function loadViolations() {
     setLoading(true)
     try {
-      let params = ''
-      if (isSeller && user?.userID) {
-        params = `?sellerUserID=${user.userID}`
-      } else if (isInvestigator && user?.userID && !viewAllViolations) {
-        params = `?investigatorUserID=${user.userID}`
-      }
+      const params = isSeller && user?.userID ? `?sellerUserID=${user.userID}` : ''
       const response = await api.get(`/api/violations${params}`)
       setViolations(response.data)
       setError('')
@@ -287,23 +290,12 @@ export default function ViolationListPage() {
           <p style={subtitle}>
             {isSeller
               ? 'Review violations for your listings and submit your response for each one.'
-              : isInvestigator && !viewAllViolations
-                ? 'Showing violations you logged. Toggle "All Violations" to see the full system list.'
-                : 'Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.'}
+              : 'Search the current shortlist against eBay Browse API results, review marketplace matches, and keep violation records current.'}
           </p>
         </div>
 
         {!isSeller && (
           <div style={headerActions}>
-            {isInvestigator && (
-              <button
-                type="button"
-                onClick={() => setViewAllViolations((v) => !v)}
-                style={viewToggleButton}
-              >
-                {viewAllViolations ? 'My Violations' : 'All Violations'}
-              </button>
-            )}
             <button
               type="button"
               onClick={handleSearch}
