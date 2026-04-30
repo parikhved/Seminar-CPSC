@@ -63,14 +63,13 @@ def _token_overlap(reference_tokens: Set[str], listing_tokens: Set[str]) -> floa
 
 
 _PAREN_RE = re.compile(r"\([^)]*\)")
-_NUMERIC_SUFFIX_RE = re.compile(r"\b\d+[a-z]*\b", re.IGNORECASE)
 
 
 def _looks_like_fake_brand(token: str) -> bool:
     """A heuristic: synthetic-brand prefixes tend to be a single CamelCase or
     smushed-compound word with no spaces (FunZone, ChillMax, BrightSparks).
-    Real product nouns (Smoke, Crib, Helmet) wouldn't be flagged because they
-    appear elsewhere in the name and we keep them via the token set."""
+    Real product nouns wouldn't be flagged because they're typically <7 chars
+    and not internally CamelCased."""
     if not token or " " in token:
         return False
     if not token[0].isalpha() or not token[0].isupper():
@@ -86,8 +85,7 @@ def build_recall_query(recall: Any) -> str:
     so jamming them into the query causes zero results. Strategy:
     - drop parenthesized clauses ("(40L)") — they hurt recall
     - drop a leading CamelCase brand-style token if present
-    - drop the manufacturer entirely (also fictional)
-    - keep at most the last 5 substantive words so the query stays tight
+    - drop the manufacturer (also fictional)
     """
     raw_name = (getattr(recall, "productName", None) or "").strip()
     if not raw_name:
@@ -100,11 +98,7 @@ def build_recall_query(recall: Any) -> str:
     if words and _looks_like_fake_brand(words[0]):
         words = words[1:]
 
-    keepers = [w for w in words if not _NUMERIC_SUFFIX_RE.fullmatch(w)]
-    if not keepers:
-        keepers = words
-
-    return " ".join(keepers[-5:]).strip() or raw_name
+    return " ".join(words).strip() or raw_name
 
 
 def score_listing_match(
