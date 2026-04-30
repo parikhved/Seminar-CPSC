@@ -473,7 +473,7 @@ def search_shortlist_for_violations(
             if not recall:
                 continue
 
-            query = _clean_text(recall.productName)
+            query = build_recall_query(recall) or _clean_text(recall.productName)
             if not query:
                 continue
 
@@ -1134,7 +1134,15 @@ def archive_violation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Violation not found.",
             )
-        violation.isArchived = bool(payload.isArchived)
+
+        next_archived = bool(payload.isArchived)
+        if next_archived and (_clean_text(violation.violationStatus) or "").lower() != "resolved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only resolved violations can be archived.",
+            )
+
+        violation.isArchived = next_archived
         db.commit()
         db.refresh(violation)
         return _build_violation_out(violation)

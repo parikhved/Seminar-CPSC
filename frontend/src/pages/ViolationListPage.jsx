@@ -458,14 +458,21 @@ export default function ViolationListPage() {
                                 Edit
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setArchiveTarget(violation)}
-                              style={archived ? restoreButton : archiveButton}
-                            >
-                              {archived ? <RotateCcw size={13} /> : <Archive size={13} />}
-                              {archived ? 'Restore' : 'Archive'}
-                            </button>
+                            {(() => {
+                              const archiveBlocked = !archived && !isResolved(violation.status || violation.violationStatus)
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setArchiveTarget(violation)}
+                                  disabled={archiveBlocked}
+                                  title={archiveBlocked ? 'Resolve the violation before archiving.' : undefined}
+                                  style={archived ? restoreButton : (archiveBlocked ? disabledArchiveButton : archiveButton)}
+                                >
+                                  {archived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                                  {archived ? 'Restore' : 'Archive'}
+                                </button>
+                              )
+                            })()}
                           </>
                         )}
                       </div>
@@ -951,6 +958,8 @@ const restoreButton = {
   fontWeight: 600,
   cursor: 'pointer',
 }
+
+const disabledArchiveButton = { ...archiveButton, opacity: 0.45, cursor: 'not-allowed' }
 
 const archivedToggleActive = {
   display: 'inline-flex',
