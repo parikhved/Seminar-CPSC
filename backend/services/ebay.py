@@ -118,7 +118,7 @@ class EbayClient:
         self._token_expires_at = now + timedelta(seconds=max(expires_in - 60, 60))
         return token
 
-    def search_items(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
+    def _fetch_items(self, query: str, limit: int) -> List[Dict[str, Any]]:
         token = self._get_access_token()
 
         logger.info("eBay search | env=%s marketplace=%s query=%r limit=%s",
@@ -146,10 +146,43 @@ class EbayClient:
         except httpx.HTTPError as exc:
             raise EbayApiError(f"Unable to reach the eBay Browse API: {exc}") from exc
 
-        payload = response.json()
-        items = payload.get("itemSummaries", [])
-        listings: List[Dict[str, Any]] = []
+        return response.json().get("itemSummaries", []) or []
 
+    @staticmethod
+    def _build_query_variants(query: str) -> List[str]:
+        """Generate progressively shorter fallback queries.
+
+        eBay's keyword search effectively AND's tokens, so a long brand-heavy
+        query often returns zero hits even when shorter variants find plenty
+        of candidates worth scoring against the recall."""
+        cleaned = " ".join((query or "").split())
+        if not cleaned:
+            return []
+
+        variants: List[str] = [cleaned]
+        words = cleaned.split()
+        for take in (4, 3, 2):
+            if len(words) > take:
+                tail = " ".join(words[-take:])
+                if tail not in variants:
+                    variants.append(tail)
+        return variants
+
+    def search_items(self, query: str, limit: int = 16) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        attempted: List[str] = []
+        for variant in self._build_query_variants(query):
+            attempted.append(variant)
+            items = self._fetch_items(variant, limit)
+            if items:
+                if variant != attempted[0]:
+                    logger.info(
+                        "eBay search | original query %r returned 0 results; falling back to %r",
+                        attempted[0], variant,
+                    )
+                break
+
+        listings: List[Dict[str, Any]] = []
         for item in items:
             price = item.get("price") or {}
             image = item.get("image") or {}

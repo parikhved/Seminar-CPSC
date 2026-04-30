@@ -136,8 +136,8 @@ class RecallSummary(BaseModel):
 class EbayScanRequest(BaseModel):
     recallID: int
     query: Optional[str] = None
-    limit: int = Field(default=8, ge=1, le=20)
-    minScore: float = Field(default=0.45, ge=0, le=1)
+    limit: int = Field(default=16, ge=1, le=50)
+    minScore: float = Field(default=0.25, ge=0, le=1)
 
 
 class DetectedListingOut(BaseModel):
@@ -167,8 +167,8 @@ class EbayScanResponse(BaseModel):
 
 class ViolationShortlistSearchRequest(BaseModel):
     investigatorID: int
-    limitPerRecall: int = Field(default=8, ge=1, le=20)
-    minScore: float = Field(default=0.45, ge=0, le=1)
+    limitPerRecall: int = Field(default=16, ge=1, le=50)
+    minScore: float = Field(default=0.25, ge=0, le=1)
 
 
 class ViolationShortlistSearchResponse(BaseModel):

@@ -62,19 +62,55 @@ def _token_overlap(reference_tokens: Set[str], listing_tokens: Set[str]) -> floa
     return len(reference_tokens & listing_tokens) / len(reference_tokens)
 
 
+_PAREN_RE = re.compile(r"\([^)]*\)")
+_NUMERIC_SUFFIX_RE = re.compile(r"\b\d+[a-z]*\b", re.IGNORECASE)
+
+
+def _looks_like_fake_brand(token: str) -> bool:
+    """A heuristic: synthetic-brand prefixes tend to be a single CamelCase or
+    smushed-compound word with no spaces (FunZone, ChillMax, BrightSparks).
+    Real product nouns (Smoke, Crib, Helmet) wouldn't be flagged because they
+    appear elsewhere in the name and we keep them via the token set."""
+    if not token or " " in token:
+        return False
+    if not token[0].isalpha() or not token[0].isupper():
+        return False
+    inner_caps = sum(1 for ch in token[1:] if ch.isupper())
+    return inner_caps >= 1 or len(token) >= 7
+
+
 def build_recall_query(recall: Any) -> str:
-    parts = [
-        getattr(recall, "manufacturerName", None),
-        getattr(recall, "productName", None),
-    ]
-    cleaned = [str(part).strip() for part in parts if part and str(part).strip()]
-    return " ".join(cleaned)
+    """Produce an eBay-friendly search query.
+
+    Real eBay listings do not carry our synthetic brand names ("SafeAlert"),
+    so jamming them into the query causes zero results. Strategy:
+    - drop parenthesized clauses ("(40L)") — they hurt recall
+    - drop a leading CamelCase brand-style token if present
+    - drop the manufacturer entirely (also fictional)
+    - keep at most the last 5 substantive words so the query stays tight
+    """
+    raw_name = (getattr(recall, "productName", None) or "").strip()
+    if not raw_name:
+        return (getattr(recall, "manufacturerName", None) or "").strip()
+
+    cleaned = _PAREN_RE.sub(" ", raw_name)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    words = cleaned.split()
+    if words and _looks_like_fake_brand(words[0]):
+        words = words[1:]
+
+    keepers = [w for w in words if not _NUMERIC_SUFFIX_RE.fullmatch(w)]
+    if not keepers:
+        keepers = words
+
+    return " ".join(keepers[-5:]).strip() or raw_name
 
 
 def score_listing_match(
     recall: Any,
     listing: Dict[str, Any],
-    threshold: float = 0.45,
+    threshold: float = 0.25,
 ) -> Dict[str, Any]:
     recall_name = _as_text(getattr(recall, "productName", ""))
     recall_maker = _as_text(getattr(recall, "manufacturerName", ""))
