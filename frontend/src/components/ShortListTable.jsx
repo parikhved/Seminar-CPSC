@@ -90,13 +90,13 @@ export default function ShortListTable({ items, onEdit, onArchive, readOnly = fa
                       ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{item.assignedInvestigatorName}</span>
                       : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unassigned</span>}
                   </td>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap', minWidth: 220 }}>
                     {readOnly ? (
                       actionRenderer ? actionRenderer(item) : (
                         <span style={{ color: '#64748B', fontSize: 12 }}>Assigned</span>
                       )
                     ) : (
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {!item.isArchived && (
                           <button
                             onClick={() => onEdit(item)}
@@ -118,6 +118,7 @@ export default function ShortListTable({ items, onEdit, onArchive, readOnly = fa
                             Edit
                           </button>
                         )}
+                        {!item.isArchived && actionRenderer ? actionRenderer(item) : null}
                         <button
                           onClick={() => setConfirmEntry(item)}
                           title={item.isArchived ? 'Restore' : 'Archive'}
