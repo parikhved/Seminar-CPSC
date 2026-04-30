@@ -121,8 +121,11 @@ class EbayClient:
     def _fetch_items(self, query: str, limit: int) -> List[Dict[str, Any]]:
         token = self._get_access_token()
 
-        logger.info("eBay search | env=%s marketplace=%s query=%r limit=%s",
-                    self.environment, self.marketplace_id, query, limit)
+        print(
+            f"[eBay] env={self.environment} marketplace={self.marketplace_id} "
+            f"query={query!r} limit={limit}",
+            flush=True,
+        )
 
         try:
             response = httpx.get(
@@ -141,12 +144,15 @@ class EbayClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500]
-            logger.error("eBay search HTTP %s | body: %s", exc.response.status_code, detail)
+            print(f"[eBay] HTTP {exc.response.status_code} body: {detail}", flush=True)
             raise EbayApiError(f"eBay listing search failed: {detail}") from exc
         except httpx.HTTPError as exc:
+            print(f"[eBay] network error: {exc}", flush=True)
             raise EbayApiError(f"Unable to reach the eBay Browse API: {exc}") from exc
 
-        return response.json().get("itemSummaries", []) or []
+        items = response.json().get("itemSummaries", []) or []
+        print(f"[eBay] returned {len(items)} item(s) for query={query!r}", flush=True)
+        return items
 
     @staticmethod
     def _build_query_variants(query: str) -> List[str]:
