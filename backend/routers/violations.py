@@ -2,14 +2,15 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Adjudication, Message, ProductListing, Recall, SellerResponse, ShortList, User, Violation
+from models import Adjudication, Message, ProductListing, Recall, ReminderEmailLog, SellerResponse, ShortList, User, Violation
 from schemas import (
+    ArchiveUpdate,
     DetectedListingOut,
     EbayScanRequest,
     EbayScanResponse,
@@ -289,6 +290,7 @@ def _build_violation_out(violation: Violation) -> ViolationOut:
         status=violation.violationStatus,
         marketplaceSource=listing.marketplaceName if listing else None,
         documentationComplete=_violation_documentation_complete(violation),
+        isArchived=bool(violation.isArchived),
     )
 
 
@@ -385,6 +387,7 @@ def _build_response_list_item(r: SellerResponse) -> SellerResponseListItem:
 def list_violations(
     sellerUserID: Optional[int] = None,
     investigatorUserID: Optional[int] = None,
+    includeArchived: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     try:
@@ -398,6 +401,9 @@ def list_violations(
                 joinedload(Violation.seller_responses),
             )
         )
+
+        if not includeArchived:
+            query = query.filter(Violation.isArchived.is_(False))
 
         if sellerUserID is not None:
             query = (
@@ -1039,7 +1045,7 @@ def submit_seller_response(
 
 @router.post("/remind-overdue")
 def send_overdue_reminders(db: Session = Depends(get_db)):
-    """Send SLA reminder emails for violations with no seller response after 14 days."""
+    """Send reminder emails for violations with no seller response after 14 days."""
     try:
         cutoff = date.today() - timedelta(days=14)
 
@@ -1082,13 +1088,55 @@ def send_overdue_reminders(db: Session = Depends(get_db)):
 
             if result.status in {"sent", "skipped"}:
                 sent_count += 1
+                db.add(
+                    ReminderEmailLog(
+                        violationID=violation.violationID,
+                        recipientEmail=seller_email,
+                        sentAt=datetime.now(),
+                        status=result.status,
+                    )
+                )
             else:
                 skipped_count += 1
+
+        db.commit()
 
         return {
             "totalOverdue": len(overdue_violations),
             "remindersSent": sent_count,
             "skipped": skipped_count,
         }
+    except (ProgrammingError, OperationalError) as exc:
+        _raise_schema_error(exc, db)
+
+
+@router.patch("/{violation_id}/archive", response_model=ViolationOut)
+def archive_violation(
+    violation_id: int,
+    payload: ArchiveUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        violation = (
+            db.query(Violation)
+            .options(
+                joinedload(Violation.investigator),
+                joinedload(Violation.recipient),
+                joinedload(Violation.listing),
+                joinedload(Violation.recall).joinedload(Recall.shortlist_entry),
+                joinedload(Violation.seller_responses),
+            )
+            .filter(Violation.violationID == violation_id)
+            .first()
+        )
+        if not violation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Violation not found.",
+            )
+        violation.isArchived = bool(payload.isArchived)
+        db.commit()
+        db.refresh(violation)
+        return _build_violation_out(violation)
     except (ProgrammingError, OperationalError) as exc:
         _raise_schema_error(exc, db)

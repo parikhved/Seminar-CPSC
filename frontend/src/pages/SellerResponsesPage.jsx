@@ -99,7 +99,7 @@ export default function SellerResponsesPage() {
     <div style={page}>
       <div style={header}>
         <div>
-          <p style={eyebrow}>Sprint 3 — Seller Engagement</p>
+          <p style={eyebrow}>Seller Engagement</p>
           <h1 style={title}>Seller Responses</h1>
           <p style={subtitle}>
             Review all seller responses submitted to violation notices. Track response types and supporting evidence.

@@ -46,7 +46,6 @@ export default function LoginPage() {
             Protecting consumers through efficient recall review, prioritization, and investigator handoff.
           </div>
           <div style={heroMeta}>U.S. Consumer Product Safety Commission</div>
-          <div style={heroMeta}>2026 Sprint 2 workspace</div>
         </div>
       </div>
 

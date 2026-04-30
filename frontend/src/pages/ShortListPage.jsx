@@ -16,6 +16,7 @@ export default function ShortListPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
+  const [showArchived, setShowArchived] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [assignTarget, setAssignTarget] = useState(null)
   const [investigators, setInvestigators] = useState([])
@@ -30,12 +31,14 @@ export default function ShortListPage() {
       const params = {}
       if (filter !== 'All') params.priority = filter
       if (isInvestigator && user?.userID) params.investigatorUserID = user.userID
+      if (showArchived) params.includeArchived = true
       const res = await api.get('/api/shortlist', { params })
-      setItems(res.data)
+      const data = showArchived ? res.data.filter((entry) => entry.isArchived) : res.data
+      setItems(data)
     } finally {
       setLoading(false)
     }
-  }, [filter, isInvestigator, user?.userID])
+  }, [filter, isInvestigator, user?.userID, showArchived])
 
   useEffect(() => {
     if (isManager) {
@@ -72,13 +75,21 @@ export default function ShortListPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  async function handleDelete(shortListID) {
+  async function handleArchive(item) {
+    const nextArchived = !item.isArchived
     try {
-      await api.delete(`/api/shortlist/${shortListID}`)
-      showToast(`Priority list entry #${shortListID} removed.`, 'info')
+      await api.patch(`/api/shortlist/${item.shortListID}/archive`, {
+        isArchived: nextArchived,
+      })
+      showToast(
+        nextArchived
+          ? `Priority list entry #${item.shortListID} archived.`
+          : `Priority list entry #${item.shortListID} restored.`,
+        'info',
+      )
       fetchData()
     } catch (err) {
-      showToast(err.response?.data?.detail ?? 'Failed to delete entry.', 'error')
+      showToast(err.response?.data?.detail ?? 'Failed to update entry.', 'error')
     }
   }
 
@@ -128,8 +139,27 @@ export default function ShortListPage() {
         </div>
 
         <span style={{ fontSize: 13, color: '#64748B' }}>
-          <strong>{items.length}</strong> recall{items.length !== 1 ? 's' : ''} {isInvestigator ? 'in your queue' : 'on priority list'}
+          <strong>{items.length}</strong> recall{items.length !== 1 ? 's' : ''} {isInvestigator ? 'in your queue' : showArchived ? 'archived' : 'on priority list'}
         </span>
+
+        {!isInvestigator && (
+          <button
+            type="button"
+            onClick={() => setShowArchived((prev) => !prev)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #CBD5E1',
+              backgroundColor: showArchived ? '#0A1628' : '#FFFFFF',
+              color: showArchived ? '#FFFFFF' : '#334155',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {showArchived ? 'Showing Archived — Switch to Active' : 'Show Archived'}
+          </button>
+        )}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {['Critical', 'High', 'Medium', 'Low'].map((lvl) =>
@@ -150,7 +180,7 @@ export default function ShortListPage() {
         <ShortListTable
           items={items}
           onEdit={setEditItem}
-          onDelete={handleDelete}
+          onArchive={handleArchive}
           readOnly={isInvestigator}
           actionRenderer={(item) => (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

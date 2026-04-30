@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { BarChart3, Bell, FileSearch, LayoutDashboard, MessageSquare, ShieldAlert, Siren } from 'lucide-react'
+import { BarChart3, FileSearch, LayoutDashboard, MessageSquare, ShieldAlert, Siren } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Sidebar() {
@@ -8,7 +8,6 @@ export default function Sidebar() {
 
   const navItems = user?.role === 'Seller'
     ? [
-        { label: 'Violation Notices', icon: Bell, path: '/seller/notices' },
         { label: 'Violation List', icon: Siren, path: '/violations' },
       ]
     : user?.role === 'Investigator'
@@ -22,7 +21,7 @@ export default function Sidebar() {
         ]
       : [
           { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-          { label: 'Import / View Recalls', icon: FileSearch, path: '/recalls' },
+          { label: 'Recall List', icon: FileSearch, path: '/recalls' },
           { label: 'Priority List', icon: ShieldAlert, path: '/shortlist' },
           { label: 'Violation List', icon: Siren, path: '/violations' },
           { label: 'Seller Responses', icon: MessageSquare, path: '/seller-responses' },
@@ -47,15 +46,6 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <div style={footerCard}>
-        <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Sprint 3
-        </div>
-        <div style={{ marginTop: 8, fontSize: 14, color: '#e2e8f0', lineHeight: 1.5 }}>
-          Track seller responses to recalled product violations and monitor SLA compliance.
-        </div>
-      </div>
     </aside>
   )
 }
@@ -129,9 +119,3 @@ function navLinkStyle(isActive) {
   }
 }
 
-const footerCard = {
-  padding: 18,
-  borderRadius: 22,
-  backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  border: '1px solid rgba(255,255,255,0.08)',
-}

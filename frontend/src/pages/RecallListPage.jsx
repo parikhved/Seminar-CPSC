@@ -57,33 +57,36 @@ export default function RecallListPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    try {
-      const [recallsRes, shortlistRes] = await Promise.all([
-        api.get('/api/recalls', { params: { page: 1, limit: 100, search: debouncedSearch || undefined } }),
-        api.get('/api/shortlist'),
-      ])
+    const [recallsResult, shortlistResult] = await Promise.allSettled([
+      api.get('/api/recalls', { params: { page: 1, limit: 100, search: debouncedSearch || undefined } }),
+      api.get('/api/shortlist'),
+    ])
 
-      const shortlistByRecallId = new Map(shortlistRes.data.map((item) => [item.recallID, item]))
-      const enrichedRecalls = recallsRes.data.recalls.map((recall) => {
-        const shortlistItem = shortlistByRecallId.get(recall.recallID)
-        const severity = shortlistItem?.priorityLevel ?? null
-        const status = shortlistItem ? deriveStatus(shortlistItem.priorityLevel) : 'Pending'
-
-        return {
-          ...recall,
-          severity,
-          status,
-          shortListID: shortlistItem?.shortListID ?? null,
-        }
-      })
-
-      setRecalls(enrichedRecalls)
-    } catch {
+    if (recallsResult.status !== 'fulfilled') {
       showToast('Failed to load recalls. The server may be starting up — try again in a moment.', 'error')
-    } finally {
+      setRecalls([])
       setLoading(false)
       setRefreshing(false)
+      return
     }
+
+    const shortlistData = shortlistResult.status === 'fulfilled' ? shortlistResult.value.data : []
+    const shortlistByRecallId = new Map(shortlistData.map((item) => [item.recallID, item]))
+    const enrichedRecalls = recallsResult.value.data.recalls.map((recall) => {
+      const shortlistItem = shortlistByRecallId.get(recall.recallID)
+      const severity = shortlistItem?.priorityLevel ?? null
+      const status = shortlistItem ? deriveStatus(shortlistItem.priorityLevel) : 'Pending'
+      return {
+        ...recall,
+        severity,
+        status,
+        shortListID: shortlistItem?.shortListID ?? null,
+      }
+    })
+
+    setRecalls(enrichedRecalls)
+    setLoading(false)
+    setRefreshing(false)
   }, [debouncedSearch])
 
   useEffect(() => {

@@ -104,6 +104,9 @@ class ShortListOut(BaseModel):
     assignedInvestigatorID: Optional[int] = None
     assignedInvestigatorName: Optional[str] = None
 
+    # Archive flag
+    isArchived: bool = False
+
     model_config = {"from_attributes": True}
 
 
@@ -243,6 +246,7 @@ class ViolationOut(BaseModel):
     status: Optional[str] = None
     marketplaceSource: Optional[str] = None
     documentationComplete: bool = False
+    isArchived: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -301,6 +305,10 @@ class ViolationStatusUpdate(BaseModel):
     status: str
 
 
+class ArchiveUpdate(BaseModel):
+    isArchived: bool
+
+
 class SellerViolationNoticeOut(BaseModel):
     violationID: int
     violationStatus: Optional[str] = None
@@ -348,20 +356,32 @@ class ViolationAnalyticsOverview(BaseModel):
     resolutionRate: ViolationResolutionMetrics
 
 
-# ── Sprint 3 OKR Analytics ────────────────────────────────────────────────────
-
 class SellerResponseRateMetrics(BaseModel):
-    respondedWithin14Days: int
     totalViolations: int
+    respondedWithin14Days: int
+    respondedAfter14Days: int
+    notResponded: int
     responseRatePercentage: float
     baseline: int = 0
     target: int = 5
 
 
 class SellerResponseDocumentationMetrics(BaseModel):
+    totalResponses: int
     completeResponses: int
     incompleteResponses: int
-    totalResponses: int
     completenessPercentage: float
     baseline: int = 0
     target: int = 5
+
+
+class ReminderEmailTrendPoint(BaseModel):
+    date: str
+    label: str
+    count: int
+
+
+class ReminderEmailTrend(BaseModel):
+    sentByDay: List[ReminderEmailTrendPoint] = Field(default_factory=list)
+    totalSentLast14Days: int
+    totalSentAllTime: int

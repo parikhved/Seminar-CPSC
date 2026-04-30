@@ -87,15 +87,6 @@ export default function SellerDashboardPage() {
         </div>
       </div>
 
-      <div style={stepsGrid}>
-        {['Log In', 'View Violation Notice', 'Submit Response + Evidence'].map((step, index) => (
-          <div key={step} style={stepCard}>
-            <div style={stepNumber}>{index + 1}</div>
-            <div style={stepText}>{step}</div>
-          </div>
-        ))}
-      </div>
-
       <div style={statsGrid}>
         <MetricCard icon={FileWarning} label="Violation Notices" value={stats.total} tint="blue" />
         <MetricCard icon={MailQuestion} label="Awaiting Response" value={stats.awaitingResponse} tint="amber" />

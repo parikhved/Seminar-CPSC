@@ -66,6 +66,7 @@ class ShortList(Base):
     managerUserID            = Column("managerUserID",            Integer,  ForeignKey("user.userID"), nullable=False)
     recallID                 = Column("recallID",                 Integer,  ForeignKey("recall.recallID"), nullable=False, unique=True)
     assignedInvestigatorID   = Column("assignedInvestigatorID",   Integer,  ForeignKey("user.userID"))
+    isArchived               = Column("isArchived",               Boolean, nullable=False, default=False)
 
     manager              = relationship("User", back_populates="shortlists",          foreign_keys=[managerUserID])
     assigned_investigator = relationship("User", back_populates="assigned_shortlists", foreign_keys=[assignedInvestigatorID])
@@ -125,6 +126,7 @@ class Violation(Base):
     receivedByID      = Column("receivedByID",      Integer,  ForeignKey("user.userID"))
     recallID          = Column("recallID",          Integer,  ForeignKey("recall.recallID"))
     listingID         = Column("listingID",         Integer,  ForeignKey("productListing.listingID"))
+    isArchived        = Column("isArchived",        Boolean,  nullable=False, default=False)
 
     investigator = relationship("User", back_populates="detected_violations", foreign_keys=[investigatorID])
     recipient = relationship("User", back_populates="received_violations", foreign_keys=[receivedByID])
@@ -181,3 +183,13 @@ class Adjudication(Base):
     dateAdjudicated = Column("dateAdjudicated", Date)
     violationID     = Column("violationID",     Integer,     ForeignKey("violation.violationID"))
     investigatorID  = Column("investigatorID",  Integer,     ForeignKey("user.userID"))
+
+
+class ReminderEmailLog(Base):
+    __tablename__ = "reminderEmailLog"
+
+    reminderID      = Column("reminderID",     Integer,  primary_key=True, index=True)
+    violationID     = Column("violationID",    Integer,  ForeignKey("violation.violationID"), nullable=False)
+    recipientEmail  = Column("recipientEmail", String(120), nullable=False)
+    sentAt          = Column("sentAt",         DateTime, nullable=False)
+    status          = Column("status",         String(20), nullable=False, default="sent")

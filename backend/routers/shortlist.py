@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Recall, ShortList, User
-from schemas import InvestigatorOut, OKRMetrics, ShortListAssign, ShortListCreate, ShortListOut, ShortListUpdate
+from schemas import ArchiveUpdate, InvestigatorOut, OKRMetrics, ShortListAssign, ShortListCreate, ShortListOut, ShortListUpdate
 
 router = APIRouter(prefix="/api/shortlist", tags=["ShortList"])
 
@@ -36,6 +36,7 @@ def _build_shortlist_out(entry: ShortList) -> ShortListOut:
         assignedInvestigatorName=(
             f"{investigator.firstName} {investigator.lastName}" if investigator else None
         ),
+        isArchived=bool(entry.isArchived),
     )
 
 
@@ -43,12 +44,13 @@ def _build_shortlist_out(entry: ShortList) -> ShortListOut:
 @router.get("/analytics/okr", response_model=OKRMetrics)
 def get_okr_metrics(db: Session = Depends(get_db)):
     total_recalls = db.query(Recall).count()
-    total_shortlisted = db.query(ShortList).count()
+    total_shortlisted = db.query(ShortList).filter(ShortList.isArchived.is_(False)).count()
 
     # Complete records: priorityLevel not null AND notes not null and not empty
     complete_records = (
         db.query(ShortList)
         .filter(
+            ShortList.isArchived.is_(False),
             ShortList.priorityLevel.isnot(None),
             ShortList.notes.isnot(None),
             ShortList.notes != "",
@@ -66,6 +68,7 @@ def get_okr_metrics(db: Session = Depends(get_db)):
     priority_counts = {"Low": 0, "Medium": 0, "High": 0, "Critical": 0}
     rows = (
         db.query(ShortList.priorityLevel, func.count(ShortList.shortListID))
+        .filter(ShortList.isArchived.is_(False))
         .group_by(ShortList.priorityLevel)
         .all()
     )
@@ -101,9 +104,12 @@ def list_investigators(db: Session = Depends(get_db)):
 def list_shortlist(
     priority: Optional[str] = Query(None),
     investigatorUserID: Optional[int] = Query(None),
+    includeArchived: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     query = db.query(ShortList)
+    if not includeArchived:
+        query = query.filter(ShortList.isArchived.is_(False))
     if priority:
         query = query.filter(ShortList.priorityLevel == priority)
     if investigatorUserID is not None:
@@ -213,6 +219,24 @@ def assign_investigator(
     else:
         entry.assignedInvestigatorID = None
 
+    db.commit()
+    db.refresh(entry)
+    return _build_shortlist_out(entry)
+
+
+@router.patch("/{shortlist_id}/archive", response_model=ShortListOut)
+def archive_shortlist(
+    shortlist_id: int,
+    payload: ArchiveUpdate,
+    db: Session = Depends(get_db),
+):
+    entry = db.query(ShortList).filter(ShortList.shortListID == shortlist_id).first()
+    if not entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ShortList entry not found.",
+        )
+    entry.isArchived = bool(payload.isArchived)
     db.commit()
     db.refresh(entry)
     return _build_shortlist_out(entry)

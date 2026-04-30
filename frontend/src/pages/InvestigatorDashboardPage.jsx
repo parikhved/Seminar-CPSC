@@ -122,24 +122,9 @@ export default function InvestigatorDashboardPage() {
           <p style={eyebrow}>Investigator Dashboard</p>
           <h1 style={title}>Enforcement Workflow</h1>
           <p style={subtitle}>
-            Log in, review assigned recalls, compare them with marketplace listings, capture evidence, log violations, and notify sellers.
+            Review assigned recalls, compare them with marketplace listings, capture evidence, and log violations.
           </p>
         </div>
-      </div>
-
-      <div style={stepsGrid}>
-        {[
-          'Log In',
-          'View Assigned Recall',
-          'Compare Recall vs Marketplace Listings',
-          'Log Violation (Notes + Evidence)',
-          'Send Notification to Seller',
-        ].map((step, index) => (
-          <div key={step} style={stepCard}>
-            <div style={stepNumber}>{index + 1}</div>
-            <div style={stepText}>{step}</div>
-          </div>
-        ))}
       </div>
 
       <div style={statsGrid}>

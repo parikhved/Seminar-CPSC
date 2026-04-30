@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Archive, RotateCcw } from 'lucide-react'
 import PriorityBadge from './PriorityBadge'
 
 function truncate(str, maxLen = 60) {
@@ -12,8 +12,8 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function ShortListTable({ items, onEdit, onDelete, readOnly = false, actionRenderer = null }) {
-  const [confirmId, setConfirmId] = useState(null)
+export default function ShortListTable({ items, onEdit, onArchive, readOnly = false, actionRenderer = null }) {
+  const [confirmEntry, setConfirmEntry] = useState(null)
 
   const TH = ({ children }) => (
     <th
@@ -97,43 +97,45 @@ export default function ShortListTable({ items, onEdit, onDelete, readOnly = fal
                       )
                     ) : (
                       <div style={{ display: 'flex', gap: 8 }}>
+                        {!item.isArchived && (
+                          <button
+                            onClick={() => onEdit(item)}
+                            title="Edit"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '5px 10px',
+                              borderRadius: 5,
+                              border: '1px solid #E2E8F0',
+                              backgroundColor: '#F8FAFC',
+                              color: '#0071BC',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Pencil size={13} />
+                            Edit
+                          </button>
+                        )}
                         <button
-                          onClick={() => onEdit(item)}
-                          title="Edit"
+                          onClick={() => setConfirmEntry(item)}
+                          title={item.isArchived ? 'Restore' : 'Archive'}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 4,
                             padding: '5px 10px',
                             borderRadius: 5,
-                            border: '1px solid #E2E8F0',
-                            backgroundColor: '#F8FAFC',
-                            color: '#0071BC',
+                            border: item.isArchived ? '1px solid #BAE6FD' : '1px solid #FED7AA',
+                            backgroundColor: item.isArchived ? '#F0F9FF' : '#FFF7ED',
+                            color: item.isArchived ? '#0369A1' : '#C2410C',
                             fontSize: 12,
                             cursor: 'pointer',
                           }}
                         >
-                          <Pencil size={13} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setConfirmId(item.shortListID)}
-                          title="Delete"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '5px 10px',
-                            borderRadius: 5,
-                            border: '1px solid #FECACA',
-                            backgroundColor: '#FEF2F2',
-                            color: '#DC2626',
-                            fontSize: 12,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Trash2 size={13} />
-                          Delete
+                          {item.isArchived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                          {item.isArchived ? 'Restore' : 'Archive'}
                         </button>
                       </div>
                     )}
@@ -145,36 +147,39 @@ export default function ShortListTable({ items, onEdit, onDelete, readOnly = fal
         </table>
       </div>
 
-      {/* Confirm Delete Dialog */}
-      {!readOnly && confirmId && (
+      {/* Confirm Archive Dialog */}
+      {!readOnly && confirmEntry && (
         <div style={overlay}>
-          <div style={{ ...modal, maxWidth: 400, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-            <h3 style={{ margin: '0 0 8px', color: '#0A1628' }}>Delete Entry?</h3>
+          <div style={{ ...modal, maxWidth: 420, textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 8px', color: '#0A1628' }}>
+              {confirmEntry.isArchived ? 'Restore Entry?' : 'Archive Entry?'}
+            </h3>
             <p style={{ color: '#64748B', fontSize: 14, marginBottom: 24 }}>
-              This will remove ShortList #{confirmId} from the priority list. This action cannot be undone.
+              {confirmEntry.isArchived
+                ? `Restore ShortList #${confirmEntry.shortListID} so it appears in the active priority list again.`
+                : `Archive ShortList #${confirmEntry.shortListID}. Archived entries are hidden from the active list but kept on record and can be restored later.`}
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button
-                onClick={() => setConfirmId(null)}
+                onClick={() => setConfirmEntry(null)}
                 style={cancelBtn}
               >
                 Cancel
               </button>
               <button
-                onClick={() => { onDelete(confirmId); setConfirmId(null) }}
+                onClick={() => { onArchive(confirmEntry); setConfirmEntry(null) }}
                 style={{
                   padding: '9px 20px',
                   borderRadius: 6,
                   border: 'none',
-                  backgroundColor: '#DC2626',
+                  backgroundColor: confirmEntry.isArchived ? '#0284C7' : '#C2410C',
                   color: '#fff',
                   fontWeight: 600,
                   fontSize: 14,
                   cursor: 'pointer',
                 }}
               >
-                Delete
+                {confirmEntry.isArchived ? 'Restore' : 'Archive'}
               </button>
             </div>
           </div>

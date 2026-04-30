@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import {
+  Archive,
   ExternalLink,
   MessageSquare,
   Pencil,
+  RotateCcw,
   Search,
   ShieldAlert,
-  Trash2,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
@@ -121,13 +122,14 @@ export default function ViolationListPage() {
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [editTarget, setEditTarget] = useState(null)
   const [editForm, setEditForm] = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [archiveTarget, setArchiveTarget] = useState(null)
   const [searchSummary, setSearchSummary] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
   const [respondTarget, setRespondTarget] = useState(null)
   const [respondForm, setRespondForm] = useState(null)
   const [respondErrors, setRespondErrors] = useState({})
@@ -141,14 +143,20 @@ export default function ViolationListPage() {
 
   useEffect(() => {
     loadViolations()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived])
 
   async function loadViolations() {
     setLoading(true)
     try {
-      const params = isSeller && user?.userID ? `?sellerUserID=${user.userID}` : ''
-      const response = await api.get(`/api/violations${params}`)
-      setViolations(response.data)
+      const params = {}
+      if (isSeller && user?.userID) params.sellerUserID = user.userID
+      if (showArchived && !isSeller) params.includeArchived = true
+      const response = await api.get('/api/violations', { params })
+      const data = (showArchived && !isSeller)
+        ? response.data.filter((item) => item.isArchived)
+        : response.data
+      setViolations(data)
       setError('')
     } catch (err) {
       setError(err.response?.data?.detail ?? 'Unable to load the violation list right now.')
@@ -215,20 +223,28 @@ export default function ViolationListPage() {
     }
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return
+  async function confirmArchive() {
+    if (!archiveTarget) return
+    const nextArchived = !archiveTarget.isArchived
 
-    setDeleting(true)
+    setArchiving(true)
     try {
-      await api.delete(`/api/violations/${deleteTarget.violationID}`)
-      setViolations((current) => current.filter((item) => item.violationID !== deleteTarget.violationID))
-      showToast(`Violation #${deleteTarget.violationID} deleted.`, 'info')
-      setDeleteTarget(null)
+      await api.patch(`/api/violations/${archiveTarget.violationID}/archive`, {
+        isArchived: nextArchived,
+      })
+      showToast(
+        nextArchived
+          ? `Violation #${archiveTarget.violationID} archived.`
+          : `Violation #${archiveTarget.violationID} restored.`,
+        'info',
+      )
+      setArchiveTarget(null)
+      await loadViolations()
     } catch (err) {
-      const detail = err.response?.data?.detail ?? 'Unable to delete this violation right now.'
+      const detail = err.response?.data?.detail ?? 'Unable to update this violation right now.'
       showToast(detail, 'error')
     } finally {
-      setDeleting(false)
+      setArchiving(false)
     }
   }
 
@@ -313,6 +329,14 @@ export default function ViolationListPage() {
               <ShieldAlert size={16} />
               Open Logging Workspace
             </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived((prev) => !prev)}
+              style={showArchived ? archivedToggleActive : secondaryButton}
+            >
+              <Archive size={16} />
+              {showArchived ? 'Showing Archived' : 'Show Archived'}
+            </button>
           </div>
         )}
       </div>
@@ -359,8 +383,8 @@ export default function ViolationListPage() {
             </thead>
             <tbody>
               {filteredViolations.length ? filteredViolations.map((violation) => {
-                const deleteDisabled = !isResolved(violation.status || violation.violationStatus)
                 const rsStatus = violation.responseStatus || 'No Response'
+                const archived = Boolean(violation.isArchived)
                 return (
                   <tr key={violation.violationID} style={{ borderBottom: '1px solid #eef2f7' }}>
                     <td style={tdStrong}>#{violation.violationID}</td>
@@ -428,18 +452,19 @@ export default function ViolationListPage() {
                           </button>
                         ) : (
                           <>
-                            <button type="button" onClick={() => openEditModal(violation)} style={editButton}>
-                              <Pencil size={13} />
-                              Edit
-                            </button>
+                            {!archived && (
+                              <button type="button" onClick={() => openEditModal(violation)} style={editButton}>
+                                <Pencil size={13} />
+                                Edit
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => setDeleteTarget(violation)}
-                              disabled={deleteDisabled}
-                              style={deleteDisabled ? disabledDeleteButton : deleteButton}
+                              onClick={() => setArchiveTarget(violation)}
+                              style={archived ? restoreButton : archiveButton}
                             >
-                              <Trash2 size={13} />
-                              Delete
+                              {archived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                              {archived ? 'Restore' : 'Archive'}
                             </button>
                           </>
                         )}
@@ -537,19 +562,28 @@ export default function ViolationListPage() {
         </ModalCard>
       ) : null}
 
-      {/* Delete confirmation modal (staff only) */}
-      {deleteTarget ? (
+      {/* Archive confirmation modal (staff only) */}
+      {archiveTarget ? (
         <ModalCard>
-          <h2 style={modalTitle}>Delete Violation?</h2>
+          <h2 style={modalTitle}>
+            {archiveTarget.isArchived ? 'Restore Violation?' : 'Archive Violation?'}
+          </h2>
           <p style={modalCopy}>
-            Delete Violation #{deleteTarget.violationID} for {deleteTarget.productName || deleteTarget.recallProductName || 'this product'}.
+            {archiveTarget.isArchived
+              ? `Restore Violation #${archiveTarget.violationID} so it appears in the active violation list again.`
+              : `Archive Violation #${archiveTarget.violationID} for ${archiveTarget.productName || archiveTarget.recallProductName || 'this product'}. Archived violations are hidden from the active list but kept on record.`}
           </p>
           <div style={modalActions}>
-            <button type="button" onClick={() => setDeleteTarget(null)} style={modalSecondaryButton}>
+            <button type="button" onClick={() => setArchiveTarget(null)} style={modalSecondaryButton}>
               Cancel
             </button>
-            <button type="button" onClick={confirmDelete} disabled={deleting} style={deleting ? modalDisabledDeleteButton : modalDeleteButton}>
-              {deleting ? 'Deleting…' : 'Delete'}
+            <button
+              type="button"
+              onClick={confirmArchive}
+              disabled={archiving}
+              style={archiving ? modalDisabledButton : modalPrimaryButton}
+            >
+              {archiving ? 'Saving…' : archiveTarget.isArchived ? 'Restore' : 'Archive'}
             </button>
           </div>
         </ModalCard>
@@ -747,20 +781,6 @@ const secondaryButton = {
   cursor: 'pointer',
 }
 
-const viewToggleButton = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '12px 18px',
-  borderRadius: 14,
-  border: '1px solid #818cf8',
-  backgroundColor: '#eef2ff',
-  color: '#3730a3',
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
-}
-
 const filterBanner = {
   display: 'flex',
   justifyContent: 'space-between',
@@ -904,21 +924,47 @@ const respondButton = {
   cursor: 'pointer',
 }
 
-const deleteButton = {
+const archiveButton = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 5,
   padding: '7px 10px',
   borderRadius: 8,
-  border: '1px solid #fecaca',
-  backgroundColor: '#fef2f2',
-  color: '#b91c1c',
+  border: '1px solid #fed7aa',
+  backgroundColor: '#fff7ed',
+  color: '#c2410c',
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
 }
 
-const disabledDeleteButton = { ...deleteButton, opacity: 0.45, cursor: 'not-allowed' }
+const restoreButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '7px 10px',
+  borderRadius: 8,
+  border: '1px solid #bae6fd',
+  backgroundColor: '#f0f9ff',
+  color: '#0369a1',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+}
+
+const archivedToggleActive = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '12px 18px',
+  borderRadius: 14,
+  border: '1px solid #0f172a',
+  backgroundColor: '#0f172a',
+  color: '#ffffff',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+}
 
 const emptyCell = {
   padding: '40px 16px',
@@ -1034,8 +1080,4 @@ const modalSecondaryButton = {
   cursor: 'pointer',
 }
 
-const modalDeleteButton = { ...modalPrimaryButton, background: '#b91c1c' }
-
 const modalDisabledButton = { ...modalPrimaryButton, opacity: 0.55, cursor: 'not-allowed' }
-
-const modalDisabledDeleteButton = { ...modalDeleteButton, opacity: 0.55, cursor: 'not-allowed' }

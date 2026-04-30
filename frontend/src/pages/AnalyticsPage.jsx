@@ -89,47 +89,43 @@ export default function AnalyticsPage() {
   })
   const [sellerResponseRate, setSellerResponseRate] = useState(null)
   const [sellerResponseDoc, setSellerResponseDoc]   = useState(null)
+  const [reminderTrend, setReminderTrend]    = useState(null)
   const [loading, setLoading]                = useState(true)
   const [error, setError]                    = useState('')
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      try {
-        const [
-          okrRes,
-          incRes,
-          trendRes,
-          dateRes,
-          catRes,
-          violationRes,
-          srRateRes,
-          srDocRes,
-        ] = await Promise.all([
-          api.get('/api/shortlist/analytics/okr'),
-          api.get('/api/analytics/incomplete-recalls'),
-          api.get('/api/analytics/shortlist-trend'),
-          api.get('/api/analytics/recalls-by-date'),
-          api.get('/api/analytics/category-week'),
-          api.get('/api/analytics/violations-overview'),
-          api.get('/api/analytics/seller-response-rate'),
-          api.get('/api/analytics/seller-response-documentation'),
-        ])
+      const results = await Promise.allSettled([
+        api.get('/api/shortlist/analytics/okr'),
+        api.get('/api/analytics/incomplete-recalls'),
+        api.get('/api/analytics/shortlist-trend'),
+        api.get('/api/analytics/recalls-by-date'),
+        api.get('/api/analytics/category-week'),
+        api.get('/api/analytics/violations-overview'),
+        api.get('/api/analytics/seller-response-rate'),
+        api.get('/api/analytics/seller-response-documentation'),
+        api.get('/api/analytics/reminder-emails-trend'),
+      ])
 
-        setOkr(okrRes.data)
-        setIncomplete(incRes.data)
-        setShortlistTrend(trendRes.data)
-        setRecallsByDate(dateRes.data)
-        setCategoryWeek(catRes.data)
-        setViolationOverview(violationRes.data)
-        setSellerResponseRate(srRateRes.data)
-        setSellerResponseDoc(srDocRes.data)
-        setError('')
-      } catch {
+      const [okrRes, incRes, trendRes, dateRes, catRes, violationRes, srRateRes, srDocRes, reminderRes] = results
+
+      if (okrRes.status === 'fulfilled') setOkr(okrRes.value.data)
+      if (incRes.status === 'fulfilled') setIncomplete(incRes.value.data)
+      if (trendRes.status === 'fulfilled') setShortlistTrend(trendRes.value.data)
+      if (dateRes.status === 'fulfilled') setRecallsByDate(dateRes.value.data)
+      if (catRes.status === 'fulfilled') setCategoryWeek(catRes.value.data)
+      if (violationRes.status === 'fulfilled') setViolationOverview(violationRes.value.data)
+      if (srRateRes.status === 'fulfilled') setSellerResponseRate(srRateRes.value.data)
+      if (srDocRes.status === 'fulfilled') setSellerResponseDoc(srDocRes.value.data)
+      if (reminderRes.status === 'fulfilled') setReminderTrend(reminderRes.value.data)
+
+      if (okrRes.status !== 'fulfilled') {
         setError('Unable to load analytics right now. Please refresh in a moment.')
-      } finally {
-        setLoading(false)
+      } else {
+        setError('')
       }
+      setLoading(false)
     }
 
     load()
@@ -261,7 +257,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* ── Sprint 3 OKR 3.1 ── */}
+      {/* ── OKR 3.1 ── */}
       <SectionHeading>OKR 3.1 — Seller Response Rate within 14 Days</SectionHeading>
       {sellerResponseRate ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -316,7 +312,7 @@ export default function AnalyticsPage() {
         </div>
       ) : null}
 
-      {/* ── Sprint 3 OKR 3.2 ── */}
+      {/* ── OKR 3.2 ── */}
       <SectionHeading>OKR 3.2 — Percentage of Fully Documented Seller Responses</SectionHeading>
       {sellerResponseDoc ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -373,6 +369,40 @@ export default function AnalyticsPage() {
               <span>{sellerResponseDoc.totalResponses} total responses</span>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {/* ── Reminder Emails Trend ── */}
+      <SectionHeading>SLA Reminder Emails Sent — Last 14 Days</SectionHeading>
+      {reminderTrend ? (
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={cardTitle}>Daily Reminder Volume</h3>
+              <p style={cardDesc}>
+                Reminder emails sent automatically to sellers whose violations have gone 14+ days without a response.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={metricBadge}>{reminderTrend.totalSentLast14Days} last 14 days</div>
+              <div style={{ ...metricBadge, backgroundColor: '#f3e8ff', color: '#6b21a8' }}>
+                {reminderTrend.totalSentAllTime} all time
+              </div>
+            </div>
+          </div>
+          {reminderTrend.sentByDay.every((d) => d.count === 0) ? (
+            <p style={emptyMsg}>No reminder emails have been sent in the past 14 days.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={reminderTrend.sentByDay}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: 13, borderRadius: 6, border: '1px solid #E2E8F0' }} />
+                <Bar dataKey="count" fill="#7C3AED" radius={[8, 8, 0, 0]} name="Reminder Emails" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       ) : null}
 

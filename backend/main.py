@@ -7,7 +7,7 @@ from routers import analytics, auth, recalls, shortlist, violations
 
 app = FastAPI(
     title="CPSC Compliance & Analytics API",
-    description="Sprint 2: Marketplace Violation Detection System",
+    description="Marketplace Violation Detection System",
     version="1.0.0",
 )
 
@@ -44,7 +44,7 @@ app.include_router(violations.router)
 @app.get("/")
 def root():
     return {
-        "message": "CPSC Compliance & Analytics API — Sprint 2",
+        "message": "CPSC Compliance & Analytics API",
         "docs": "/docs",
         "health": "/health",
     }
@@ -52,4 +52,4 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "cpsc-compliance-api", "sprint": 2}
+    return {"status": "ok", "service": "cpsc-compliance-api"}
